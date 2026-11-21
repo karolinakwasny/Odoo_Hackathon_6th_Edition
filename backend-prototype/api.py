@@ -1,23 +1,29 @@
-"""Runs coordinator.py + worker.py on chunks/ and reports the run over WebSocket
-with the welcome / progress / error messages from ../ws_data.txt.
+"""Runs the coordinator (coordinator.py) on chunks/ and reports the run over WebSocket.
 
-Run from this folder:
+Run from this folder (start the workers separately with ./start_workers.sh):
     pip install fastapi "uvicorn[standard]"
     python3 -m uvicorn api:app --port 8000
 
-On startup it launches one worker.py per entry in coordinator.WORKER_ENDPOINTS and starts the
-coordinator run. Watchers connect to ws://localhost:8000/ws to follow the progress.
+The coordinator does not start by itself. It starts when a client sends
+{"type": "request", "project_id": "math"} (start_workers.sh or the Start button do this).
+
+Messages to clients:
+    welcome, progress, chunk_progress    from ../ws_data.txt
+    state    the coordinator's full snapshot (workers, countries, chunks), as in its Tkinter window
+    log      one line of the coordinator's log
+Messages from clients:
+    request  start the run
+    speed    {"type": "speed", "country": "DE", "mode": "L" | "M" | "H"}
 """
 import asyncio
 import queue
 import time
 import uuid
-import json
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-from coordinator import WORKER_ENDPOINTS, CoordinatorEngine
+from coordinator import CoordinatorEngine
 
 HERE = Path(__file__).parent
 PROJECT_ID, PROJECT_NAME = "math", "Math chunks"
@@ -26,7 +32,8 @@ events: queue.Queue = queue.Queue()
 engine = CoordinatorEngine(events, chunks_dir=HERE / "chunks")
 clients: dict[str, WebSocket] = {}  # node_id -> connection
 run_started = False
-forward_task = None
+last_state: dict | None = None  # latest coordinator snapshot, sent to new clients
+logs: list[dict] = []           # coordinator log lines, the last 200 are kept
 
 app = FastAPI()
 
@@ -51,6 +58,10 @@ def progress_msg() -> dict:
     }
 
 
+def state_msg() -> dict:
+    return {"type": "state", "run_started": run_started, **(last_state or {})}
+
+
 async def broadcast(msg: dict) -> None:
     for ws in list(clients.values()):
         try:
@@ -59,13 +70,22 @@ async def broadcast(msg: dict) -> None:
             pass
 
 async def forward_coordinator_events() -> None:
-    """The coordinator reports changes on a queue; send progress whenever its state changes."""
+    """The coordinator reports changes on a queue; pass them on to every connected client."""
+    global last_state
     while True:
         changed = False
         while not events.empty():
-            kind, _ = events.get()
+            kind, payload = events.get()
+            if kind == "log":
+                entry = {"time": time.strftime("%H:%M:%S"), **payload}
+                logs.append(entry)
+                del logs[:-200]
+                await broadcast({"type": "log", **entry})
+            elif kind == "state":
+                last_state = payload
             changed = changed or kind in ("state", "finished")
         if changed:
+            await broadcast(state_msg())
             await broadcast(progress_msg())
             for chunk, state in list(engine.chunk_states.items()):
                 if state == "in_progress":
@@ -77,13 +97,20 @@ async def forward_coordinator_events() -> None:
                     })
         await asyncio.sleep(0.2)
 
+
+@app.on_event("startup")
+async def start_forwarding() -> None:
+    # only forwards updates; the coordinator itself waits for a "request"
+    asyncio.create_task(forward_coordinator_events())
+    engine.emit_state()  # so the page can show the workers before the run starts
+
+
 async def start_run() -> bool:
-    global run_started, forward_task
+    global run_started
     if run_started:
         return False
     run_started = True
     engine.start()
-    forward_task = asyncio.create_task(forward_coordinator_events())
     return True
 
 @app.websocket("/ws")
@@ -97,10 +124,19 @@ async def watch(ws: WebSocket):
         "projects": [{"id": PROJECT_ID, "name": PROJECT_NAME, "percent": percent()}],
     })
     await ws.send_json(progress_msg())
+    await ws.send_json(state_msg())
+    for entry in logs:
+        await ws.send_json({"type": "log", **entry})
     try:
         while True:
-            await ws.receive_text()
-            await start_run()
+            try:
+                msg = await ws.receive_json()
+            except ValueError:  # not valid JSON
+                continue
+            if msg.get("type") == "request":
+                await start_run()
+            elif msg.get("type") == "speed":
+                engine.set_country_speed(str(msg.get("country", "")), str(msg.get("mode", "")))
     except WebSocketDisconnect:
         pass
     finally:

@@ -10,11 +10,18 @@ from tkinter import scrolledtext, ttk
 
 CHUNKS_DIR = Path("chunks")
 
-# Fixed list of worker endpoints the coordinator connects to
+# Up to 10 worker endpoints the coordinator connects to (ports 5051..5060)
 WORKER_ENDPOINTS: list[tuple[str, str, int]] = [
     ("Worker-1", "127.0.0.1", 5051),
     ("Worker-2", "127.0.0.1", 5052),
     ("Worker-3", "127.0.0.1", 5053),
+    ("Worker-4", "127.0.0.1", 5054),
+    ("Worker-5", "127.0.0.1", 5055),
+    ("Worker-6", "127.0.0.1", 5056),
+    ("Worker-7", "127.0.0.1", 5057),
+    ("Worker-8", "127.0.0.1", 5058),
+    ("Worker-9", "127.0.0.1", 5059),
+    ("Worker-10", "127.0.0.1", 5060),
 ]
 
 # 10 distinct colors for workers (wraps around at index 10 -> 0)
@@ -63,6 +70,9 @@ class CoordinatorEngine:
         endpoints: list[tuple[str, str, int]] = WORKER_ENDPOINTS,
         chunks_dir: Path = CHUNKS_DIR,
     ) -> None:
+        if len(endpoints) > 10:
+            raise ValueError("Coordinator supports at most 10 workers at once.")
+
         self.log_queue = log_queue
         self.chunks_dir = chunks_dir
         self.workers: dict[str, WorkerSlot] = {
@@ -233,7 +243,6 @@ class CoordinatorEngine:
                 slot.current_chunk = None
 
             buffer = ""
-            # Read initial hello message if worker sends country info
             hello_received = False
             while not self._stop_event.is_set() and not hello_received:
                 try:
@@ -418,8 +427,8 @@ class CoordinatorEngine:
 class CoordinatorApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("Program 1 — Multi-Worker Chunk Coordinator")
-        self.root.geometry("1160x660")
+        self.root.title("Program 1 — Multi-Worker Chunk Coordinator (Up to 10 Workers)")
+        self.root.geometry("1200x760")
 
         self.log_queue: queue.Queue = queue.Queue()
         self.engine = CoordinatorEngine(self.log_queue)
@@ -465,12 +474,26 @@ class CoordinatorApp:
         )
         self.no_country_lbl.pack(anchor="w")
 
-        workers_box = tk.LabelFrame(left_panel, text="Connected Workers", padx=10, pady=6)
+        workers_box = tk.LabelFrame(left_panel, text="Connected Workers (Max 10)", padx=10, pady=6)
         workers_box.pack(fill=tk.X, pady=(0, 8))
+
+        workers_canvas = tk.Canvas(workers_box, height=130, highlightthickness=0)
+        workers_scrollbar = ttk.Scrollbar(workers_box, orient="vertical", command=workers_canvas.yview)
+        workers_inner = tk.Frame(workers_canvas)
+
+        workers_inner.bind(
+            "<Configure>",
+            lambda e: workers_canvas.configure(scrollregion=workers_canvas.bbox("all")),
+        )
+        workers_canvas.create_window((0, 0), window=workers_inner, anchor="nw")
+        workers_canvas.configure(yscrollcommand=workers_scrollbar.set)
+
+        workers_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        workers_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         for name, slot in self.engine.workers.items():
             lbl = tk.Label(
-                workers_box,
+                workers_inner,
                 text=f"{name} [{slot.country}] ({slot.host}:{slot.port}) — status: {slot.status} | chunk: -",
                 fg=slot.color,
                 anchor="w",

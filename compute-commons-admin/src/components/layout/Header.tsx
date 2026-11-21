@@ -3,12 +3,13 @@ import { useLocation } from "react-router-dom"
 
 export function Header() {
   const { pathname } = useLocation()
-  const page = pathname.startsWith('/projects') ? 'Projects' : pathname.startsWith('/network') ? 'Network' : pathname.startsWith('/simulation') ? 'Simulation' : 'Overview'
+  const page = pathname.startsWith('/projects') ? 'Projects' : pathname.startsWith('/network') ? 'Network' : pathname.startsWith('/simulation') ? 'Simulation' : pathname.startsWith('/coordinator') ? 'Coordinator' : 'Overview'
   const descriptions: Record<string, string> = {
     Overview: 'Monitor your distributed computing network.',
     Projects: 'Plan and monitor distributed research workloads.',
     Network: 'Explore the distributed computing network.',
     Simulation: 'Model network and renewable energy scenarios.',
+    Coordinator: 'Live view of the coordinator: workers, country speeds, log and chunk progress.',
   }
   return (
     <header className="header">
@@ -19,7 +20,7 @@ export function Header() {
       </div>
 
       <div className="header-actions">
-        {page !== 'Projects' && page !== 'Overview' && (
+        {page !== 'Projects' && page !== 'Overview' && page !== 'Coordinator' && (
           <div className="simulation-status">
             <span className="pulse-dot" />
             Simulation running
