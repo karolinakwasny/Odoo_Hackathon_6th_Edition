@@ -4,42 +4,18 @@ import { feature } from 'topojson-client'
 import type { FeatureCollection, GeoJsonProperties, Geometry } from 'geojson'
 import type { GeometryCollection, Topology } from 'topojson-specification'
 import world from 'world-atlas/countries-50m.json'
-import { electricityZones, computingNodes } from '../../../mocks/electricity'
-import type { ComputingNode, ElectricityMode, ElectricityZone, TimeInterval, TimeView } from '../types'
+import { worldwideZoneCountries } from '../../../mocks/electricity'
+import type { ElectricityMode, ElectricityZone } from '../types'
 
 interface ElectricityMapProps {
   mode: ElectricityMode
-  timeView: TimeView
-  interval: TimeInterval
   onZoneSelect: (zone: ElectricityZone) => void
-  onNodeSelect: (node: ComputingNode) => void
+  zones?: ElectricityZone[]
 }
 
-const ZONE_COUNTRIES: Record<string, string[]> = {
-  'DE-LU': ['Germany', 'Luxembourg'],
-  FR: ['France'],
-  NL: ['Netherlands'],
-  'DK-DK1': ['Denmark'],
-  ES: ['Spain'],
-  PT: ['Portugal'],
-  'IT-NORTH': ['Italy'],
-  'NO-NO1': ['Norway'],
-  CZ: ['Czechia'],
-  PL: ['Poland'],
-}
+const ZONE_COUNTRIES = worldwideZoneCountries
 
-function adjustedZone(zone: ElectricityZone, timeView: TimeView, interval: TimeInterval): ElectricityZone {
-  const intervalFactor = interval === 'hourly' ? 0.985 : 1
-  if (timeView === 'historical') {
-    return { ...zone, carbonIntensity: Math.round(zone.carbonIntensity * 1.08 * intervalFactor), renewablePercentage: Math.max(0, Math.round(zone.renewablePercentage * 0.94)) }
-  }
-  if (timeView === 'forecast') {
-    return { ...zone, carbonIntensity: Math.round(zone.carbonIntensity * 0.82 * intervalFactor), renewablePercentage: Math.min(100, Math.round(zone.renewablePercentage * 1.09)) }
-  }
-  return { ...zone, carbonIntensity: Math.round(zone.carbonIntensity * intervalFactor) }
-}
-
-export function ElectricityMap({ mode, timeView, interval, onZoneSelect, onNodeSelect }: ElectricityMapProps) {
+export function ElectricityMap({ mode, onZoneSelect, zones }: ElectricityMapProps) {
   const [zoom, setZoom] = useState(1)
   const panRef = useRef({ x: 0, y: 0 })
   const mapGroupRef = useRef<SVGGElement>(null)
@@ -47,8 +23,8 @@ export function ElectricityMap({ mode, timeView, interval, onZoneSelect, onNodeS
   const frameRef = useRef<number | null>(null)
 
   const adjustedZones = useMemo(
-    () => electricityZones.map((zone) => adjustedZone(zone, timeView, interval)),
-    [timeView, interval],
+    () => zones ?? [],
+    [zones],
   )
 
   useEffect(() => {
@@ -79,11 +55,13 @@ export function ElectricityMap({ mode, timeView, interval, onZoneSelect, onNodeS
   const path = useMemo(() => geoPath(projection), [projection])
 
   const zoneColor = (zone: ElectricityZone) => {
-    if (mode === 'renewable') {
-      if (zone.renewablePercentage >= 85) return '#70a965'
-      if (zone.renewablePercentage >= 65) return '#aeca77'
-      if (zone.renewablePercentage >= 45) return '#d4c66f'
-      return '#d48a62'
+    if (mode === 'load') {
+      const load = zone.totalLoadMw ?? 0
+      if (load < 10000) return '#b7d3a3'
+      if (load < 30000) return '#89b66f'
+      if (load < 60000) return '#d2c86a'
+      if (load < 100000) return '#d99a58'
+      return '#c56e55'
     }
     if (zone.carbonIntensity < 100) return '#70a965'
     if (zone.carbonIntensity < 200) return '#aeca77'
@@ -169,26 +147,6 @@ export function ElectricityMap({ mode, timeView, interval, onZoneSelect, onNodeS
               >
                 {zone && <title>{zone.name}: {zone.carbonIntensity} gCO₂eq/kWh</title>}
               </path>
-            )
-          })}
-          {computingNodes.map((node) => {
-            const coordinates = projection([node.longitude, node.latitude])
-            if (!coordinates) return null
-            return (
-              <g
-                key={node.id}
-                className={`electricity-node ${node.status.toLowerCase()}`}
-                transform={`translate(${coordinates[0]} ${coordinates[1]})`}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={() => onNodeSelect(node)}
-                role="button"
-                aria-label={`Open ${node.name}`}
-              >
-                <circle r={13 / zoom} fill="#ffffff" />
-                <circle r={9 / zoom} fill="#3f7450" />
-                <circle r={3 / zoom} fill="#dff1b7" />
-                <title>{node.name} · {node.status}</title>
-              </g>
             )
           })}
         </g>

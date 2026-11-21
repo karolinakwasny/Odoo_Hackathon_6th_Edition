@@ -731,12 +731,6 @@ button {
 .electricity-zone:hover {
   fill-opacity: .92;
 }
-.electricity-node {
-  cursor: pointer;
-  filter: drop-shadow(0 2px 3px rgba(45,72,50,.28));
-}
-.electricity-node.maintenance circle:nth-of-type(2) { fill: #aa9566; }
-.electricity-node.idle circle:nth-of-type(2) { fill: #789466; }
 .europe-map-navigation {
   position: absolute;
   z-index: 3;
@@ -760,6 +754,11 @@ button {
   grid-column: 1 / -1;
   width: 73px;
   font-size: 9px;
+}
+.network-page-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .electricity-map .maplibregl-ctrl-top-right {
   top: 12px;
@@ -971,6 +970,9 @@ button {
 }
 .legend-gradient.renewable {
   background: linear-gradient(90deg,#b45b51,#edbd62,#d2d778,#8fcf76,#4f985f);
+}
+.legend-gradient.load {
+  background: linear-gradient(90deg,#b7d3a3,#89b66f,#d2c86a,#d99a58,#c56e55);
 }
 .legend-values {
   display: flex;

@@ -1,53 +1,66 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Badge } from '@mantine/core'
 import { IconArrowRight, IconLeaf, IconServer } from '@tabler/icons-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { NetworkControls } from './components/NetworkControls'
 import { ElectricityMap } from './components/ElectricityMap'
 import { NetworkDetails, type NetworkSelection } from './components/NetworkDetails'
-import type { ElectricityMode, TimeInterval, TimeView } from './types'
+import type { ElectricityMode } from './types'
 import { schedulerAllocations } from '../../mocks/scheduler'
+import { fetchLatestElectricityZones } from '../../services/electricityMaps'
+import type { ElectricityZone } from './types'
 import { useHubProgress } from '../../hooks/useHubProgress'
 
 export function NetworkPage() {
   const [mode, setMode] = useState<ElectricityMode>('carbon')
-  const [timeView, setTimeView] = useState<TimeView>('current')
-  const [interval, setInterval] = useState<TimeInterval>('15m')
   const [selection, setSelection] = useState<NetworkSelection>(null)
   const progress = useHubProgress()
+  const [liveZones, setLiveZones] = useState<ElectricityZone[]>([])
+  const [liveStatus, setLiveStatus] = useState<'loading' | 'live' | 'error'>('loading')
+
+  useEffect(() => {
+    let active = true
+    fetchLatestElectricityZones().then((result) => {
+      if (!active) return
+      setLiveZones(result.zones)
+      setLiveStatus(result.live ? 'live' : 'error')
+    })
+    return () => { active = false }
+  }, [])
 
   return (
     <>
       <PageHeader
         title="Network"
-        description="Electricity conditions and distributed computing capacity across Europe."
-        actions={<Badge color="green" variant="light">{progress?.nodes_online ?? 0} nodes online</Badge>}
+        description="Live worldwide electricity carbon intensity and total load."
+        actions={
+          <div className="network-page-status">
+            <Badge color={liveStatus === 'live' ? 'green' : 'gray'} variant="light">
+              {liveStatus === 'loading' ? 'Loading live API data' : liveStatus === 'live' ? 'Live API data' : 'API unavailable'}
+            </Badge>
+            <Badge color="green" variant="light">{progress?.nodes_online ?? 0} nodes online</Badge>
+          </div>
+        }
       />
 
       <section className="network-map-section">
         <NetworkControls
           mode={mode}
-          timeView={timeView}
-          interval={interval}
           onModeChange={setMode}
-          onTimeViewChange={setTimeView}
-          onIntervalChange={setInterval}
         />
         <div className="network-map-wrap">
           <ElectricityMap
             mode={mode}
-            timeView={timeView}
-            interval={interval}
+            zones={liveZones}
             onZoneSelect={(zone) => setSelection({ kind: 'zone', zone })}
-            onNodeSelect={(node) => setSelection({ kind: 'node', node })}
           />
           <NetworkDetails selection={selection} onClose={() => setSelection(null)} />
           <div className="map-legend">
-            <strong>{mode === 'carbon' ? 'Carbon intensity' : 'Renewable energy'}</strong>
+            <strong>{mode === 'carbon' ? 'Carbon intensity' : 'Total load'}</strong>
             {mode === 'carbon' ? (
               <><div className="legend-gradient carbon" /><div className="legend-values"><span>50</span><span>200</span><span>400</span><span>650+ gCO₂eq/kWh</span></div></>
             ) : (
-              <><div className="legend-gradient renewable" /><div className="legend-values"><span>20%</span><span>45%</span><span>65%</span><span>100%</span></div></>
+              <><div className="legend-gradient load" /><div className="legend-values"><span>10k</span><span>30k</span><span>60k</span><span>100k+ MW</span></div></>
             )}
           </div>
           <div className="map-node-key"><span /><b>Computing node</b></div>

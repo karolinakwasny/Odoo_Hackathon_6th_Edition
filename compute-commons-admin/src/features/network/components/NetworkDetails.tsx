@@ -31,7 +31,6 @@ export function NetworkDetails({ selection, onClose }: { selection: NetworkSelec
   const zone = selection.zone
   const nodes = computingNodes.filter((node) => node.zoneId === zone.id)
   const capacity = nodes.reduce((sum, node) => sum + node.cpuCapacity, 0)
-  const mixEntries = Object.entries(zone.electricityMix)
   return (
     <aside className="network-detail-panel zone-detail-panel">
       <button className="detail-close" type="button" onClick={onClose} aria-label="Close details"><IconX size={16} /></button>
@@ -39,17 +38,11 @@ export function NetworkDetails({ selection, onClose }: { selection: NetworkSelec
       <h3>{zone.name}</h3>
       <div className="zone-summary">
         <div><IconBolt size={16} /><strong>{zone.carbonIntensity}</strong><span>gCO₂eq/kWh</span></div>
-        <div><strong>{zone.renewablePercentage}%</strong><span>renewables</span></div>
+        <div><strong>{zone.totalLoadMw?.toLocaleString() ?? '—'}</strong><span>MW total load</span></div>
       </div>
-      <div className="zone-mix">
-        <h4>Electricity mix</h4>
-        {mixEntries.map(([source, value]) => (
-          <div className="mix-row" key={source}>
-            <span>{source}</span>
-            <div><i style={{ width: `${value}%` }} /></div>
-            <strong>{value}%</strong>
-          </div>
-        ))}
+      <div className="zone-compute live-load">
+        <span>Latest API reading</span>
+        <strong>{new Date(zone.timestamp).toLocaleString()}</strong>
       </div>
       <div className="zone-compute">
         <span>{nodes.length} connected nodes</span>
