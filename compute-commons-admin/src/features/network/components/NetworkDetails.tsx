@@ -1,4 +1,4 @@
-import { IconBolt, IconCpu, IconMemory, IconServer, IconX } from '@tabler/icons-react'
+import { IconBolt, IconCpu, IconLeaf, IconMemory, IconServer, IconX } from '@tabler/icons-react'
 import type { ComputingNode, ElectricityZone } from '../types'
 import { computingNodes } from '../../../mocks/electricity'
 
@@ -39,6 +39,7 @@ export function NetworkDetails({ selection, onClose }: { selection: NetworkSelec
       <div className="zone-summary">
         <div><IconBolt size={16} /><strong>{zone.carbonIntensity}</strong><span>gCO₂eq/kWh</span></div>
         <div><strong>{zone.totalLoadMw?.toLocaleString() ?? '—'}</strong><span>MW total load</span></div>
+        <div><IconLeaf size={16} /><strong>{zone.renewablePercentage ?? '—'}{zone.renewablePercentage !== undefined && '%'}</strong><span>renewable energy</span></div>
       </div>
       <div className="zone-compute live-load">
         <span>Latest API reading</span>

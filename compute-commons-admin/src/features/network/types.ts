@@ -18,6 +18,7 @@ export interface ElectricityZone {
   carbonIntensity: number
   timestamp: string
   totalLoadMw?: number
+  renewablePercentage?: number
   dataSource: 'live'
 }
 
@@ -38,6 +39,7 @@ export interface ElectricityMapsApiResponse {
   zone: string
   datetime: string
   carbonIntensity?: number
+  renewablePercentage?: number
   value?: number
   unit?: string
 }
