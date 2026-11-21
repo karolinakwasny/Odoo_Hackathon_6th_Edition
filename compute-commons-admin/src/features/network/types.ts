@@ -1,6 +1,5 @@
-export type ElectricityMode = 'carbon' | 'renewable'
-export type TimeView = 'current' | 'historical' | 'forecast'
-export type TimeInterval = '15m' | 'hourly'
+export type ElectricityMode = 'carbon' | 'load'
+export type TimeView = 'current'
 export type NodeStatus = 'Processing' | 'Idle' | 'Maintenance'
 
 export interface ElectricityMix {
@@ -17,10 +16,9 @@ export interface ElectricityZone {
   name: string
   country: string
   carbonIntensity: number
-  renewablePercentage: number
-  electricityMix: ElectricityMix
   timestamp: string
-  polygon: [number, number][]
+  totalLoadMw?: number
+  dataSource: 'live'
 }
 
 export interface ComputingNode {
@@ -34,4 +32,12 @@ export interface ComputingNode {
   availableMemoryGb: number
   currentTaskCount: number
   status: NodeStatus
+}
+
+export interface ElectricityMapsApiResponse {
+  zone: string
+  datetime: string
+  carbonIntensity?: number
+  value?: number
+  unit?: string
 }
