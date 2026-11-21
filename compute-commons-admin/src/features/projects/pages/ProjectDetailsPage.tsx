@@ -5,12 +5,15 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { StatusBadge } from '../../../components/ui/StatusBadge'
 import { EmptyState } from '../../../components/ui/EmptyState'
 import { useProjectStore } from '../../../store/projectStore'
+import { useHubProgress } from '../../../hooks/useHubProgress'
 
 export function ProjectDetailsPage() {
   const { projectId } = useParams()
   const navigate = useNavigate()
   const project = useProjectStore((state) => state.projects.find((item) => item.id === projectId))
   const changeStatus = useProjectStore((state) => state.changeStatus)
+  const hub = useHubProgress()
+  const nodes = hub?.nodes_online ?? 0
 
   if (!project) {
     return <EmptyState title="Project not found" description="This project does not exist in the local workspace." action={<Button variant="default" onClick={() => navigate('/projects')}>Back to projects</Button>} />
@@ -78,7 +81,7 @@ export function ProjectDetailsPage() {
           </dl>
         </section>
         <section className="panel allocated-panel">
-          <div className="panel-heading"><h2>Allocated nodes</h2><Badge variant="light">{project.allocatedNodes.length} nodes</Badge></div>
+          <div className="panel-heading"><h2>Allocated nodes</h2><Badge variant="light">{nodes} nodes</Badge></div>
           {project.allocatedNodes.length ? <div className="node-list">{project.allocatedNodes.map((node) => <span key={node}><IconPlayerTrackNext size={14} />{node}</span>)}</div> : <p className="muted-copy">No nodes allocated yet.</p>}
         </section>
         <section className="panel activity-panel">

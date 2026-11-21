@@ -6,6 +6,7 @@ import { EmptyState } from '../../../components/ui/EmptyState'
 import { ProjectCard } from '../components/ProjectCard'
 import { ProjectForm } from '../components/ProjectForm'
 import { useProjectStore } from '../../../store/projectStore'
+import { useHubProgress } from '../../../hooks/useHubProgress'
 import type { CreateProjectInput, ProjectStatus } from '../types'
 
 export function ProjectsPage() {
@@ -15,6 +16,8 @@ export function ProjectsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const projects = useProjectStore((state) => state.projects)
   const add = useProjectStore((state) => state.add)
+  const hub = useHubProgress()
+  const runningProjects = hub?.projects.filter((project) => project.running > 0).length ?? 0
 
   const filtered = useMemo(() => projects.filter((project) =>
     project.name.toLowerCase().includes(search.toLowerCase())
@@ -23,7 +26,7 @@ export function ProjectsPage() {
 
   const stats = [
     ['Total projects', projects.length],
-    ['Running', projects.filter((project) => project.status === 'Running').length],
+    ['Running', runningProjects],
     ['Queued', projects.filter((project) => project.status === 'Queued').length],
     ['Completed', projects.filter((project) => project.status === 'Completed').length],
   ]
