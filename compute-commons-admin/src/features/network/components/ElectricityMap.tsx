@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { geoMercator, geoPath } from 'd3-geo'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { geoNaturalEarth1, geoPath } from 'd3-geo'
 import { feature } from 'topojson-client'
 import type { FeatureCollection, GeoJsonProperties, Geometry } from 'geojson'
 import type { GeometryCollection, Topology } from 'topojson-specification'
@@ -41,13 +41,28 @@ function adjustedZone(zone: ElectricityZone, timeView: TimeView, interval: TimeI
 
 export function ElectricityMap({ mode, timeView, interval, onZoneSelect, onNodeSelect }: ElectricityMapProps) {
   const [zoom, setZoom] = useState(1)
-  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const panRef = useRef({ x: 0, y: 0 })
+  const mapGroupRef = useRef<SVGGElement>(null)
   const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
+  const frameRef = useRef<number | null>(null)
 
   const adjustedZones = useMemo(
     () => electricityZones.map((zone) => adjustedZone(zone, timeView, interval)),
     [timeView, interval],
   )
+
+  useEffect(() => {
+    if (mapGroupRef.current) {
+      mapGroupRef.current.setAttribute(
+        'transform',
+        `translate(${500 + panRef.current.x} ${325 + panRef.current.y}) scale(${zoom}) translate(-500 -325)`,
+      )
+    }
+  }, [zoom])
+
+  useEffect(() => () => {
+    if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current)
+  }, [])
 
   const countries = useMemo(() => {
     const topology = world as unknown as Topology<{ countries: GeometryCollection }>
@@ -60,7 +75,7 @@ export function ElectricityMap({ mode, timeView, interval, onZoneSelect, onNodeS
     } satisfies FeatureCollection<Geometry, GeoJsonProperties>
   }, [])
 
-  const projection = useMemo(() => geoMercator().fitExtent([[12, 18], [988, 632]], countries), [countries])
+  const projection = useMemo(() => geoNaturalEarth1().fitExtent([[12, 18], [988, 632]], countries), [countries])
   const path = useMemo(() => geoPath(projection), [projection])
 
   const zoneColor = (zone: ElectricityZone) => {
@@ -78,15 +93,29 @@ export function ElectricityMap({ mode, timeView, interval, onZoneSelect, onNodeS
   }
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
-    dragRef.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y }
+    dragRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      panX: panRef.current.x,
+      panY: panRef.current.y,
+    }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
 
   function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
     if (!dragRef.current) return
-    setPan({
-      x: dragRef.current.panX + (event.clientX - dragRef.current.x),
-      y: dragRef.current.panY + (event.clientY - dragRef.current.y),
+    const nextX = dragRef.current.panX + (event.clientX - dragRef.current.x)
+    const nextY = dragRef.current.panY + (event.clientY - dragRef.current.y)
+    panRef.current = { x: nextX, y: nextY }
+    if (frameRef.current !== null) return
+    frameRef.current = window.requestAnimationFrame(() => {
+      frameRef.current = null
+      if (mapGroupRef.current) {
+        mapGroupRef.current.setAttribute(
+          'transform',
+          `translate(${500 + panRef.current.x} ${325 + panRef.current.y}) scale(${zoom}) translate(-500 -325)`,
+        )
+      }
     })
   }
 
@@ -98,8 +127,14 @@ export function ElectricityMap({ mode, timeView, interval, onZoneSelect, onNodeS
   }
 
   function resetMap() {
+    panRef.current = { x: 0, y: 0 }
     setZoom(1)
-    setPan({ x: 0, y: 0 })
+    if (mapGroupRef.current) {
+      mapGroupRef.current.setAttribute(
+        'transform',
+        'translate(500 325) scale(1) translate(-500 -325)',
+      )
+    }
   }
 
   return (
@@ -114,7 +149,7 @@ export function ElectricityMap({ mode, timeView, interval, onZoneSelect, onNodeS
         onPointerCancel={handlePointerUp}
       >
         <rect width="1000" height="650" fill="#edf1e9" />
-        <g transform={`translate(${500 + pan.x} ${325 + pan.y}) scale(${zoom}) translate(-500 -325)`}>
+        <g ref={mapGroupRef} transform={`translate(500 325) scale(${zoom}) translate(-500 -325)`}>
           {countries.features.map((country, index) => {
             const countryName = String(country.properties?.name ?? '')
             const zone = adjustedZones.find((item) =>
