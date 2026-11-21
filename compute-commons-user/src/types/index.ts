@@ -1,6 +1,8 @@
 export interface UserProfile {
   name: string
   email: string
+  profileType: 'Individual' | 'Organisation'
+  organisationName?: string
   username: string
   displayName?: string
   country: string
@@ -10,7 +12,7 @@ export interface UserProfile {
   interests: ProjectCategory[]
   deviceType: 'Desktop' | 'Laptop' | 'Server'
   cpuUsage: number
-  availability: 'Always' | 'When idle' | 'Scheduled hours'
+  availability: AvailabilityPeriod[]
   activeHours?: string
   prioritizeRenewableEnergy: boolean
   allowPostponement: boolean
@@ -52,6 +54,8 @@ export interface Device {
   availableMemoryGb: number
   currentTasks: number
 }
+
+export type AvailabilityPeriod = 'Mornings' | 'Afternoons' | 'Evenings' | "Don't know yet"
 
 export interface ContributionPreferences {
   cpuUsage: number

@@ -18,11 +18,11 @@ export function ProjectDetailsPage() {
   const isJoined = joined.includes(selectedProject.id)
   function join() {
     joinProject(selectedProject.id)
-    notifications.show({ title: 'Project joined', message: `You joined ${selectedProject.name}.`, color: 'green' })
+    notifications.show({ title: 'Added to My Projects', message: `${selectedProject.name} is ready for contribution.`, color: 'green' })
   }
   function leave() {
     leaveProject(selectedProject.id)
-    notifications.show({ title: 'Project left', message: `You left ${selectedProject.name}.`, color: 'yellow' })
+    notifications.show({ title: 'Removed from My Projects', message: `${selectedProject.name} was removed.`, color: 'yellow' })
   }
 
   return (
@@ -45,9 +45,9 @@ export function ProjectDetailsPage() {
           <aside className="project-action-card">
             <Badge color={project.status === 'Recruiting' ? 'lime' : 'forest'} variant="light">{project.status}</Badge>
             {isJoined ? (
-              <><Button fullWidth mt="lg" color="red" variant="light" onClick={leave}>Leave project</Button><Text ta="center" size="xs" c="dimmed" mt="xs">You are contributing to this project</Text></>
+              <><Button fullWidth mt="lg" color="red" variant="light" onClick={leave}>Remove from My Projects</Button><Text ta="center" size="xs" c="dimmed" mt="xs">Manage contribution in My Projects</Text></>
             ) : (
-              <Button fullWidth mt="lg" onClick={join}>Join project</Button>
+              <Button fullWidth mt="lg" onClick={join}>Add to My Projects</Button>
             )}
             <Divider my="lg" />
             <Group justify="space-between"><span><IconCpu size={16} /> Requirements</span><strong>{project.requirements}</strong></Group>
