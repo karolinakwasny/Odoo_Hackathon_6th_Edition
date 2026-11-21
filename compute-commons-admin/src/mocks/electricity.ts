@@ -19,7 +19,7 @@ export const worldwideZoneCountries: Record<string, string[]> = {
   'DK-DK1': ['Denmark'],
   ES: ['Spain'],
   PT: ['Portugal'],
-  'IT-NORTH': ['Italy'],
+  IT: ['Italy'],
   'NO-NO1': ['Norway'],
   CZ: ['Czechia'],
   PL: ['Poland'],

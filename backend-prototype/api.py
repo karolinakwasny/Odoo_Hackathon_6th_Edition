@@ -16,6 +16,7 @@ Messages from clients:
     speed    {"type": "speed", "country": "DE", "mode": "L" | "M" | "H"}
 """
 import asyncio
+import os
 import queue
 import time
 import uuid
@@ -102,6 +103,12 @@ async def forward_coordinator_events() -> None:
 async def start_forwarding() -> None:
     # only forwards updates; the coordinator itself waits for a "request"
     asyncio.create_task(forward_coordinator_events())
+    # Worker countries from start_workers.sh (e.g. "BE,BE,SE,..."), so they show before the run.
+    # When the run starts, each worker reports its country itself, which takes over.
+    countries = os.environ.get("WORKER_COUNTRIES", "").split(",")
+    for slot, country in zip(engine.workers.values(), countries):
+        if country.strip():
+            slot.country = country.strip().upper()
     engine.emit_state()  # so the page can show the workers before the run starts
 
 

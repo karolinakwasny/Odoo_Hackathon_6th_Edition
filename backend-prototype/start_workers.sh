@@ -26,7 +26,8 @@ COUNTRIES=("BE" "BE" "BE" "SE" "SE" "SE" "HU" "SE" "HU" "HU")
 trap 'kill $(jobs -p) 2>/dev/null' INT TERM EXIT
 
 # 1st: the backend. It waits for a "request" before it starts the coordinator.
-"$PYTHON_EXE" -m uvicorn api:app --port 8000 --timeout-graceful-shutdown 2 &
+# WORKER_COUNTRIES tells it the workers' countries up front, so the page shows them before the run.
+WORKER_COUNTRIES="$(IFS=,; echo "${COUNTRIES[*]}")" "$PYTHON_EXE" -m uvicorn api:app --port 8000 --timeout-graceful-shutdown 2 &
 sleep 2
 
 # Then the 10 workers

@@ -4,7 +4,7 @@ import { worldwideZoneCountries } from '../mocks/electricity'
 type LiveEndpoint = 'carbon-intensity' | 'total-load'
 
 const ZONE_IDS = [
-  'DE', 'FR', 'NL', 'DK-DK1', 'ES', 'PT', 'IT-NORTH', 'NO-NO1', 'CZ', 'PL',
+  'DE', 'FR', 'NL', 'DK-DK1', 'ES', 'PT', 'IT', 'NO-NO1', 'CZ', 'PL',
   'BE', 'GB', 'IE', 'SE', 'FI', 'AT', 'CH', 'GR', 'RO', 'HU', 'HR', 'BG',
   'US-CAL-CISO', 'US-TEX-ERCO', 'US-NW-BPAT', 'CA-ON', 'CA-QC', 'MX',
   'BR-CS', 'BR-N', 'BR-NE', 'BR-S', 'AR', 'CL', 'AU-NEM-NSW', 'AU-NEM-VIC',
