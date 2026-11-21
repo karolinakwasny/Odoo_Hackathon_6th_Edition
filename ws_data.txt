@@ -1,0 +1,47 @@
+every message gets a type field
+
+1. server sends to client, after client connects:
+// node_id = unique name for a device donating computing power
+{
+  "type": "welcome",
+  "node_id": "a3f9c2",
+  "projects": [
+    {"id": "wildfire", "name": "Fire Watch", "percent": 20.0}
+  ]
+}
+
+2. server sends work to client 
+{"type": "work", "project_id": "wildfire", "chunk": 7}
+
+3. server sends no work to client, because all chunks are done or running
+{"type": "no_work", "project_id": "wildfire", "reason": "complete"}
+
+4. ack: confirms a result arrived
+{"type": "ack", "project_id": "wildfire", "chunk": 7, "status": "ok"} 
+
+5. progress
+{
+  "type": "progress",
+  "projects": [
+    {"id": "wildfire", "done": 5, "running": 2, "total": 20, "percent": 25.0},
+    {"id": "climate", "done": 12, "running": 3, "total": 5, "percent": 20.0}}
+  ],
+  "nodes_online": 14
+}
+
+6. error
+{"type": "error", "message": "unknown project"}
+
+////////////////////////////////////////////////////////////////////////
+
+1. client sends request
+{"type": "request", "project_id": "wildfire"}
+
+2. client sends finished chunk
+{"type": "result", "project_id": "wildfire", "chunk": 7, "data": [0.12, 0.30, 0.41]}
+
+3. client sends pause
+{"type": "pause"}
+
+4. worker sends this to server
+{"type": "chunk_progress", "project_id": "wildfire", "chunk": 7, "percent": 45}
