@@ -15,25 +15,11 @@ export interface ElectricityZone {
   id: string
   name: string
   country: string
-  countryCode: string
-  carbonIntensity: number | null
+  carbonIntensity: number
   timestamp: string
   totalLoadMw?: number
   renewablePercentage?: number
   dataSource: 'live'
-}
-
-export interface ElectricityMapsZoneMetadata {
-  zoneKey: string
-  zoneName: string
-  displayName?: string
-  countryCode: string
-  countryName: string
-  zoneParentKey: string | null
-  subZoneKeys: string[]
-  isCommerciallyAvailable: boolean
-  tier: string
-  access?: string[]
 }
 
 export interface ComputingNode {
