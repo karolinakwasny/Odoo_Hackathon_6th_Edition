@@ -20,3 +20,21 @@ export function useHubProgress() {
 
   return progress // null until connected (or when the backend isn't running)
 }
+
+export function useChunkProgress() {
+      const [chunks, setChunks] = useState<Record<number, number>>({})
+
+  useEffect(() => {
+    const ws = new WebSocket('ws://localhost:8000/ws')
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data)
+      if (msg.type === 'progress') setChunks({})
+      if (msg.type === 'chunk_progress') {
+        setChunks((current) => ({ ...current, [msg.chunk]: msg.percent }))
+      }
+    }
+    return () => ws.close()
+  }, [])
+
+  return chunks // e.g. { 7: 45, 8: 10 } = chunk number -> percent
+}

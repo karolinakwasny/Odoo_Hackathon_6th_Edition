@@ -68,6 +68,15 @@ async def forward_coordinator_events() -> None:
             changed = changed or kind in ("state", "finished")
         if changed:
             await broadcast(progress_msg())
+
+            for chunk, state in list(engine.chunk_states.items()):
+                if state == "in_progress":
+                    await broadcast({
+                        "type": "chunk_progress",
+                        "project_id": PROJECT_ID,
+                        "chunk": chunk,
+                        "percent": engine.chunk_percents[chunk],
+                    })
         await asyncio.sleep(0.2)
 
 

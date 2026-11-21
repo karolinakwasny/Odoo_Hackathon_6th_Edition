@@ -5,7 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { StatusBadge } from '../../../components/ui/StatusBadge'
 import { EmptyState } from '../../../components/ui/EmptyState'
 import { useProjectStore } from '../../../store/projectStore'
-import { useHubProgress } from '../../../hooks/useHubProgress'
+import { useChunkProgress, useHubProgress } from '../../../hooks/useHubProgress'
 
 export function ProjectDetailsPage() {
   const { projectId } = useParams()
@@ -14,6 +14,7 @@ export function ProjectDetailsPage() {
   const changeStatus = useProjectStore((state) => state.changeStatus)
   const hub = useHubProgress()
   const nodes = hub?.nodes_online ?? 0
+  const chunkProgress = useChunkProgress()
 
   if (!project) {
     return <EmptyState title="Project not found" description="This project does not exist in the local workspace." action={<Button variant="default" onClick={() => navigate('/projects')}>Back to projects</Button>} />
@@ -55,6 +56,12 @@ export function ProjectDetailsPage() {
         <section className="panel detail-progress">
           <div className="panel-heading"><div><h2>Task progress</h2><p>{project.completedTasks} of {project.requirements.taskCount} tasks completed</p></div><strong>{progress}%</strong></div>
           <Progress value={progress} size="lg" radius="xl" color="forest" />
+              {Object.entries(chunkProgress).map(([chunk, percent]) => (
+            <div key={chunk} style={{ marginTop: 12 }}>
+              <span>Chunk {chunk}: {percent}%</span>
+              <Progress value={percent} size="sm" radius="xl" color="green" />
+            </div>
+          ))}
         </section>
         <section className="panel">
           <div className="panel-heading"><h2>Project information</h2></div>
