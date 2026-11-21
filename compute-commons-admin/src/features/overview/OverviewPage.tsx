@@ -3,9 +3,23 @@ import { StatCard } from "./StatCard"
 import { SchedulerFeed } from "./SchedulerFeed"
 import { IconArrowUpRight, IconMapPin } from "@tabler/icons-react"
 import { useNavigate } from "react-router-dom"
+import { useHubProgress } from "../../hooks/useHubProgress"
 
 export function OverviewPage() {
   const navigate = useNavigate()
+  const progress = useHubProgress()
+  const nodes = progress?.nodes_online ?? 0
+  const chunks = progress?.projects[0]
+  const stats = dashboardStats.map((stat) => {
+    if (stat.icon === 'nodes') {
+      return { ...stat, value: String(nodes), change: 'workers connected' }
+    }
+    if (stat.icon === 'tasks') {
+      return { ...stat, label: 'Chunks processed', value: `${chunks?.done ?? 0} / ${chunks?.total ?? 0}`, change: `${chunks?.running ?? 0} running` }
+    }
+    return stat
+    })
+  
   return (
     <>
       <div className="welcome-row">
@@ -20,7 +34,7 @@ export function OverviewPage() {
       </div>
 
       <div className="stats-grid">
-        {dashboardStats.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.label} {...stat} />
         ))}
       </div>
@@ -44,7 +58,7 @@ export function OverviewPage() {
               <span>Interactive network map</span>
             </div>
             <div className="map-stat">
-              <strong>128</strong>
+              <strong>{nodes}</strong>
               <span>Connected nodes</span>
             </div>
           </div>

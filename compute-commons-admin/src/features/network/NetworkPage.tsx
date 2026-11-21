@@ -7,19 +7,21 @@ import { ElectricityMap } from './components/ElectricityMap'
 import { NetworkDetails, type NetworkSelection } from './components/NetworkDetails'
 import type { ElectricityMode, TimeInterval, TimeView } from './types'
 import { schedulerAllocations } from '../../mocks/scheduler'
+import { useHubProgress } from '../../hooks/useHubProgress'
 
 export function NetworkPage() {
   const [mode, setMode] = useState<ElectricityMode>('carbon')
   const [timeView, setTimeView] = useState<TimeView>('current')
   const [interval, setInterval] = useState<TimeInterval>('15m')
   const [selection, setSelection] = useState<NetworkSelection>(null)
+  const progress = useHubProgress()
 
   return (
     <>
       <PageHeader
         title="Network"
         description="Electricity conditions and distributed computing capacity across Europe."
-        actions={<Badge color="green" variant="light">128 nodes online</Badge>}
+        actions={<Badge color="green" variant="light">{progress?.nodes_online ?? 0} nodes online</Badge>}
       />
 
       <section className="network-map-section">
