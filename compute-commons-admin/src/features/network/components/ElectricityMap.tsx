@@ -4,7 +4,8 @@ import { feature } from 'topojson-client'
 import type { FeatureCollection, GeoJsonProperties, Geometry } from 'geojson'
 import type { GeometryCollection, Topology } from 'topojson-specification'
 import world from 'world-atlas/countries-50m.json'
-import { worldwideZoneCountries } from '../../../mocks/electricity'
+
+
 import type { ElectricityMode, ElectricityZone } from '../types'
 
 interface ElectricityMapProps {
@@ -13,10 +14,8 @@ interface ElectricityMapProps {
   zones?: ElectricityZone[]
 }
 
-const ZONE_COUNTRIES = worldwideZoneCountries
-
 export function ElectricityMap({ mode, onZoneSelect, zones }: ElectricityMapProps) {
-  const [zoom, setZoom] = useState(1)
+  const [zoom, setZoom] = useState(1.25)
   const panRef = useRef({ x: 0, y: 0 })
   const mapGroupRef = useRef<SVGGElement>(null)
   const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
@@ -55,6 +54,7 @@ export function ElectricityMap({ mode, onZoneSelect, zones }: ElectricityMapProp
   const path = useMemo(() => geoPath(projection), [projection])
 
   const zoneColor = (zone: ElectricityZone) => {
+    if (zone.carbonIntensity === null) return '#dfe7da'
     if (mode === 'load') {
       const load = zone.totalLoadMw ?? 0
       if (load < 10000) return '#b7d3a3'
@@ -106,11 +106,11 @@ export function ElectricityMap({ mode, onZoneSelect, zones }: ElectricityMapProp
 
   function resetMap() {
     panRef.current = { x: 0, y: 0 }
-    setZoom(1)
+    setZoom(1.25)
     if (mapGroupRef.current) {
       mapGroupRef.current.setAttribute(
         'transform',
-        'translate(500 325) scale(1) translate(-500 -325)',
+        'translate(500 325) scale(1.25) translate(-500 -325)',
       )
     }
   }
@@ -130,8 +130,15 @@ export function ElectricityMap({ mode, onZoneSelect, zones }: ElectricityMapProp
         <g ref={mapGroupRef} transform={`translate(500 325) scale(${zoom}) translate(-500 -325)`}>
           {countries.features.map((country, index) => {
             const countryName = String(country.properties?.name ?? '')
+            const normalizedCountryName = countryName
+              .replace('United States of America', 'United States')
+              .replace('Dem. Rep. Congo', 'Democratic Republic of Congo')
+              .replace('Central African Rep.', 'Central African Republic')
+              .replace('S. Sudan', 'South Sudan')
+              .replace('Bosnia and Herz.', 'Bosnia and Herzegovina')
             const zone = adjustedZones.find((item) =>
-              (ZONE_COUNTRIES[item.id] ?? []).includes(countryName)
+              item.country.localeCompare(normalizedCountryName, undefined, { sensitivity: 'base' }) === 0
+              || item.country.localeCompare(countryName, undefined, { sensitivity: 'base' }) === 0
             )
             return (
               <path
@@ -145,15 +152,15 @@ export function ElectricityMap({ mode, onZoneSelect, zones }: ElectricityMapProp
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => zone && onZoneSelect(zone)}
               >
-                {zone && <title>{zone.name}: {zone.carbonIntensity} gCO₂eq/kWh</title>}
+                {zone && <title>{zone.name}: {zone.carbonIntensity === null ? 'Carbon intensity unavailable' : `${zone.carbonIntensity} gCO₂eq/kWh`}</title>}
               </path>
             )
           })}
         </g>
       </svg>
       <div className="europe-map-navigation" aria-label="Map navigation">
-        <button type="button" onClick={() => setZoom((value) => Math.min(4, value * 1.25))} aria-label="Zoom in">+</button>
-        <button type="button" onClick={() => setZoom((value) => Math.max(.8, value / 1.25))} aria-label="Zoom out">−</button>
+        <button type="button" onClick={() => setZoom((value) => Math.min(3, value * 1.25))} aria-label="Zoom in">+</button>
+        <button type="button" onClick={() => setZoom((value) => Math.max(1, value / 1.25))} aria-label="Zoom out">−</button>
         <button type="button" onClick={resetMap} aria-label="Reset map">Reset</button>
       </div>
     </div>

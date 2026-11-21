@@ -7,7 +7,11 @@ import { ElectricityMap } from './components/ElectricityMap'
 import { NetworkDetails, type NetworkSelection } from './components/NetworkDetails'
 import type { ElectricityMode } from './types'
 import { schedulerAllocations } from '../../mocks/scheduler'
-import { fetchLatestElectricityZones } from '../../services/electricityMaps'
+import {
+  fetchLatestElectricityZones,
+  getCachedElectricityZones,
+  isElectricityCacheFresh,
+} from '../../services/electricityMaps'
 import type { ElectricityZone } from './types'
 import { useHubProgress } from '../../hooks/useHubProgress'
 
@@ -15,18 +19,22 @@ export function NetworkPage() {
   const [mode, setMode] = useState<ElectricityMode>('carbon')
   const [selection, setSelection] = useState<NetworkSelection>(null)
   const progress = useHubProgress()
-  const [liveZones, setLiveZones] = useState<ElectricityZone[]>([])
-  const [liveStatus, setLiveStatus] = useState<'loading' | 'live' | 'error'>('loading')
+  const initialCache = getCachedElectricityZones()
+  const [liveZones, setLiveZones] = useState<ElectricityZone[]>(initialCache?.zones ?? [])
+  const [liveStatus, setLiveStatus] = useState<'loading' | 'live' | 'error'>(
+    initialCache ? (initialCache.live ? 'live' : 'error') : 'loading',
+  )
 
   useEffect(() => {
     let active = true
+    if (isElectricityCacheFresh(initialCache)) return () => { active = false }
     fetchLatestElectricityZones().then((result) => {
       if (!active) return
       setLiveZones(result.zones)
       setLiveStatus(result.live ? 'live' : 'error')
     })
     return () => { active = false }
-  }, [])
+  }, [initialCache])
 
   return (
     <>
@@ -63,7 +71,7 @@ export function NetworkPage() {
               <><div className="legend-gradient load" /><div className="legend-values"><span>10k</span><span>30k</span><span>60k</span><span>100k+ MW</span></div></>
             )}
           </div>
-          <div className="map-node-key"><span /><b>Computing node</b></div>
+          
         </div>
       </section>
 

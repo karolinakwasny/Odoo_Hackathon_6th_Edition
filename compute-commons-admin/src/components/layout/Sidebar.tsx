@@ -2,7 +2,6 @@ import {
   IconLayoutDashboard,
   IconFolders,
   IconMap,
-  IconActivity,
   IconCpu,
   IconSettings,
   IconLeaf,
@@ -13,7 +12,6 @@ const navigation = [
   { label: "Overview", icon: IconLayoutDashboard, to: "/" },
   { label: "Projects", icon: IconFolders, to: "/projects" },
   { label: "Network", icon: IconMap, to: "/network" },
-  { label: "Simulation", icon: IconActivity, to: "/simulation" },
   { label: "Coordinator", icon: IconCpu, to: "/coordinator" },
 ]
 

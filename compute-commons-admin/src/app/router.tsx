@@ -4,7 +4,6 @@ import { OverviewPage } from '../features/overview/OverviewPage'
 import { ProjectsPage } from '../features/projects/pages/ProjectsPage'
 import { ProjectDetailsPage } from '../features/projects/pages/ProjectDetailsPage'
 import { NetworkPage } from '../features/network/NetworkPage'
-import { SimulationPage } from '../features/simulation/SimulationPage'
 import { CoordinatorPage } from '../features/coordinator/CoordinatorPage'
 
 export function AppRouter() {
@@ -16,7 +15,6 @@ export function AppRouter() {
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:projectId" element={<ProjectDetailsPage />} />
           <Route path="/network" element={<NetworkPage />} />
-          <Route path="/simulation" element={<SimulationPage />} />
           <Route path="/coordinator" element={<CoordinatorPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

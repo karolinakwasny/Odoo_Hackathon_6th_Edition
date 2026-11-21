@@ -1,25 +1,62 @@
-import type { ElectricityMapsApiResponse, ElectricityZone } from '../features/network/types'
-import { worldwideZoneCountries } from '../mocks/electricity'
+import type {
+  ElectricityMapsApiResponse,
+  ElectricityMapsZoneMetadata,
+  ElectricityZone,
+} from '../features/network/types'
 
-type LiveEndpoint = 'carbon-intensity' | 'total-load' | 'power-breakdown'
+type LiveEndpoint = 'carbon-intensity' | 'total-load'
 
-const ZONE_IDS = [
-  'DE', 'FR', 'NL', 'DK-DK1', 'ES', 'PT', 'IT-NORTH', 'NO-NO1', 'CZ', 'PL',
-  'BE', 'GB', 'IE', 'SE', 'FI', 'AT', 'CH', 'GR', 'RO', 'HU', 'HR', 'BG',
-  'US-CAL-CISO', 'US-TEX-ERCO', 'US-NW-BPAT', 'CA-ON', 'CA-QC', 'MX',
-  'BR-CS', 'BR-N', 'BR-NE', 'BR-S', 'AR', 'CL', 'AU-NEM-NSW', 'AU-NEM-VIC',
-  'NZ-NZN', 'CN', 'IN-WEST', 'IN-NORTH', 'JP-TK', 'KR', 'ZA', 'NG', 'KE', 'MA', 'EG',
-]
+const CACHE_KEY = 'compute-commons:electricity-zones'
+const CACHE_TTL_MS = 30 * 60 * 1000
 
-function normalizeWorldZoneId(apiZoneId: string): string {
-  if (apiZoneId.startsWith('US-')) return 'US'
-  if (apiZoneId.startsWith('CA-')) return 'CA'
-  if (apiZoneId.startsWith('BR-')) return 'BR'
-  if (apiZoneId.startsWith('AU-')) return 'AU'
-  if (apiZoneId.startsWith('NZ-')) return 'NZ'
-  if (apiZoneId.startsWith('IN-')) return 'IN'
-  if (apiZoneId.startsWith('JP-')) return 'JP'
-  return apiZoneId
+interface ElectricityCache {
+  fetchedAt: number
+  zones: ElectricityZone[]
+  live: boolean
+}
+
+let memoryCache: ElectricityCache | null = null
+let inFlightRequest: Promise<{
+  zones: ElectricityZone[]
+  live: boolean
+}> | null = null
+
+function readCachedResult(): ElectricityCache | null {
+  if (memoryCache) return memoryCache
+  try {
+    const stored = sessionStorage.getItem(CACHE_KEY)
+    if (!stored) return null
+    const parsed = JSON.parse(stored) as ElectricityCache
+    if (!Array.isArray(parsed.zones) || typeof parsed.fetchedAt !== 'number') return null
+    memoryCache = parsed
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+export function getCachedElectricityZones(): ElectricityCache | null {
+  return readCachedResult()
+}
+
+export function isElectricityCacheFresh(cache: ElectricityCache | null): boolean {
+  return cache !== null && Date.now() - cache.fetchedAt < CACHE_TTL_MS
+}
+
+async function fetchAvailableZones(): Promise<ElectricityMapsZoneMetadata[]> {
+  const response = await fetch('/electricity-maps/v4/zones')
+  if (!response.ok) throw new Error(`Failed to fetch zones: ${response.status}`)
+  const data = await response.json() as Record<string, ElectricityMapsZoneMetadata>
+  return Object.values(data).filter((zone) =>
+    zone.isCommerciallyAvailable
+    && (zone.access?.includes('*') || zone.access?.includes('carbon-intensity/latest') || zone.access?.includes('total-load/latest'))
+  )
+}
+
+function hasAccess(apiZone: ElectricityMapsZoneMetadata, endpoint: LiveEndpoint): boolean {
+  return !apiZone.access
+    || apiZone.access.includes('*')
+    || apiZone.access.includes(`${endpoint}/latest`)
 }
 
 async function fetchLatest(endpoint: LiveEndpoint, zone: string): Promise<ElectricityMapsApiResponse | null> {
@@ -32,53 +69,89 @@ async function fetchLatest(endpoint: LiveEndpoint, zone: string): Promise<Electr
   }
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  transform: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = []
+  let cursor = 0
+
+  async function worker(): Promise<void> {
+    while (cursor < items.length) {
+      const index = cursor
+      cursor += 1
+      results[index] = await transform(items[index])
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  )
+  return results
+}
+
 export async function fetchLatestElectricityZones(): Promise<{
   zones: ElectricityZone[]
   live: boolean
 }> {
-  const liveZones = await Promise.all(ZONE_IDS.map(async (apiZoneId) => {
-    const [carbon, load, breakdown] = await Promise.all([
-      fetchLatest('carbon-intensity', apiZoneId),
-      fetchLatest('total-load', apiZoneId),
-      fetchLatest('power-breakdown', apiZoneId),
-    ])
-    if (!carbon && !load && !breakdown) return null
+  const cached = readCachedResult()
+  if (isElectricityCacheFresh(cached)) {
+    return { zones: cached?.zones ?? [], live: cached?.live ?? false }
+  }
+  if (inFlightRequest) return inFlightRequest
 
-    const zoneId = normalizeWorldZoneId(apiZoneId)
-    const countryNames = worldwideZoneCountries[zoneId] ?? [zoneId]
+  inFlightRequest = (async () => {
+  let apiZones: ElectricityMapsZoneMetadata[]
+  try {
+    apiZones = await fetchAvailableZones()
+  } catch {
+    return { zones: cached?.zones ?? [], live: false }
+  }
+
+  const liveZones = await mapWithConcurrency(apiZones, 8, async (apiZone) => {
+    const [carbon, load] = await Promise.all([
+      hasAccess(apiZone, 'carbon-intensity')
+        ? fetchLatest('carbon-intensity', apiZone.zoneKey)
+        : null,
+      hasAccess(apiZone, 'total-load')
+        ? fetchLatest('total-load', apiZone.zoneKey)
+        : null,
+    ])
+    if (!carbon && !load) return null
+
     const timestamp = carbon?.datetime ?? load?.datetime ?? new Date().toISOString()
     const merged: ElectricityZone = {
-      id: zoneId,
-      name: countryNames[0],
-      country: countryNames[0],
-      carbonIntensity: carbon?.carbonIntensity ?? 0,
+      id: apiZone.zoneKey,
+      name: apiZone.displayName || apiZone.zoneName,
+      country: apiZone.countryName,
+      countryCode: apiZone.countryCode,
+      carbonIntensity: carbon?.carbonIntensity ?? null,
       totalLoadMw: load?.value,
-      renewablePercentage: breakdown?.renewablePercentage,
       timestamp,
       dataSource: 'live',
     }
     return merged
-  }))
+  })
 
   const available = liveZones.filter((zone): zone is ElectricityZone => zone !== null)
-  const worldZones = new Map<string, ElectricityZone>()
-  available.forEach((liveZone) => {
-    const existing = worldZones.get(liveZone.id)
-    if (!existing) {
-      worldZones.set(liveZone.id, liveZone)
-      return
-    }
-    worldZones.set(liveZone.id, {
-      ...existing,
-      carbonIntensity: liveZone.carbonIntensity || existing.carbonIntensity,
-      totalLoadMw: liveZone.totalLoadMw ?? existing.totalLoadMw,
-      renewablePercentage: liveZone.renewablePercentage ?? existing.renewablePercentage,
-      timestamp: liveZone.timestamp,
-      dataSource: 'live',
-    })
-  })
-  return {
-    zones: Array.from(worldZones.values()),
+  const result = {
+    zones: available,
     live: available.length > 0,
   }
+  memoryCache = {
+    fetchedAt: Date.now(),
+    ...result,
+  }
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify(memoryCache))
+  } catch {
+    // In-memory cache remains available if storage is blocked.
+  }
+  return result
+  })().finally(() => {
+    inFlightRequest = null
+  })
+
+  return inFlightRequest
 }
