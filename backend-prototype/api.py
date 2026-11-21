@@ -10,10 +10,9 @@ coordinator run. Watchers connect to ws://localhost:8000/ws to follow the progre
 """
 import asyncio
 import queue
-import subprocess
-import sys
 import time
 import uuid
+import json
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -22,12 +21,12 @@ from coordinator import WORKER_ENDPOINTS, CoordinatorEngine
 
 HERE = Path(__file__).parent
 PROJECT_ID, PROJECT_NAME = "math", "Math chunks"
-WORKER_COUNTRIES = ["DE", "NL", "FR"]  # one per entry in WORKER_ENDPOINTS, in the same order
 
 events: queue.Queue = queue.Queue()
 engine = CoordinatorEngine(events, chunks_dir=HERE / "chunks")
 clients: dict[str, WebSocket] = {}  # node_id -> connection
-workers: list[subprocess.Popen] = []
+run_started = False
+forward_task = None
 
 app = FastAPI()
 
@@ -59,7 +58,6 @@ async def broadcast(msg: dict) -> None:
         except Exception:
             pass
 
-
 async def forward_coordinator_events() -> None:
     """The coordinator reports changes on a queue; send progress whenever its state changes."""
     while True:
@@ -69,7 +67,6 @@ async def forward_coordinator_events() -> None:
             changed = changed or kind in ("state", "finished")
         if changed:
             await broadcast(progress_msg())
-
             for chunk, state in list(engine.chunk_states.items()):
                 if state == "in_progress":
                     await broadcast({
@@ -80,21 +77,14 @@ async def forward_coordinator_events() -> None:
                     })
         await asyncio.sleep(0.2)
 
-
-@app.on_event("startup")
-async def start_run() -> None:
-    for (name, host, port), country in zip(WORKER_ENDPOINTS, WORKER_COUNTRIES):
-        workers.append(subprocess.Popen([sys.executable, str(HERE / "worker.py"), "--name", name, "--country", country, "--host", host, "--port", str(port)]))
-    time.sleep(1)  # give the workers a moment to start listening before the coordinator connects
+async def start_run() -> bool:
+    global run_started, forward_task
+    if run_started:
+        return False
+    run_started = True
     engine.start()
-    asyncio.create_task(forward_coordinator_events())
-
-
-@app.on_event("shutdown")
-def stop_workers() -> None:
-    for w in workers:
-        w.terminate()
-
+    forward_task = asyncio.create_task(forward_coordinator_events())
+    return True
 
 @app.websocket("/ws")
 async def watch(ws: WebSocket):
@@ -110,7 +100,7 @@ async def watch(ws: WebSocket):
     try:
         while True:
             await ws.receive_text()
-            await ws.send_json({"type": "error", "message": "this server only sends progress; the coordinator assigns the work"})
+            await start_run()
     except WebSocketDisconnect:
         pass
     finally:
