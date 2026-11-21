@@ -50,12 +50,7 @@ export function Sidebar() {
           Settings
         </button>
 
-        <div className="environment-card">
-          <IconLeaf size={20} />
-          <strong>Computing for a better future</strong>
-          <span>Shared resources. Smarter energy.</span>
-        </div>
-
+        
         <div className="profile">
           <div className="avatar">AD</div>
           <div>
