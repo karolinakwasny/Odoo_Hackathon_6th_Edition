@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Button, Select, TextInput } from '@mantine/core'
 import { IconPlus, IconSearch } from '@tabler/icons-react'
-import { PageHeader } from '../../../components/ui/PageHeader'
 import { EmptyState } from '../../../components/ui/EmptyState'
 import { ProjectCard } from '../components/ProjectCard'
 import { ProjectForm } from '../components/ProjectForm'
@@ -37,11 +36,10 @@ export function ProjectsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Projects"
-        description="Plan and monitor distributed research workloads."
-        actions={<Button leftSection={<IconPlus size={17} />} onClick={() => setOpened(true)}>New project</Button>}
-      />
+      <div className="welcome-row page-header">
+        <div />
+        <Button leftSection={<IconPlus size={17} />} onClick={() => setOpened(true)}>New project</Button>
+      </div>
 
       <div className="stats-grid project-stats">
         {stats.map(([label, value]) => (

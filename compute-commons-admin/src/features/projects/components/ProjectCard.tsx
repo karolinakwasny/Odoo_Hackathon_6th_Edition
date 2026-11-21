@@ -5,11 +5,11 @@ import {
   IconDots,
   IconLeaf,
   IconMicroscope,
-  IconServer,
   IconWorld,
 } from '@tabler/icons-react'
 import { Button, Progress } from '@mantine/core'
 import { useNavigate } from 'react-router-dom'
+import { useHubProgress } from '../../../hooks/useHubProgress'
 import type { Project, ProjectCategory } from '../types'
 import { StatusBadge } from '../../../components/ui/StatusBadge'
 
@@ -31,6 +31,7 @@ export function ProjectCard({ project, expanded, onToggle }: ProjectCardProps) {
   const total = project.requirements.taskCount
   const progress = total > 0 ? Math.round(project.completedTasks / total * 100) : 0
   const CategoryIcon = categoryIcons[project.category]
+  const chunks = useHubProgress()?.projects[0]
 
   return (
     <article className={`project-list-item${expanded ? ' expanded' : ''}`}>
@@ -66,12 +67,10 @@ export function ProjectCard({ project, expanded, onToggle }: ProjectCardProps) {
           <dl className="project-detail-grid">
             <div><dt>Priority</dt><dd>{project.priority}</dd></div>
             <div><dt>Strategy</dt><dd>{project.schedulingStrategy}</dd></div>
-            <div><dt>CPU</dt><dd>{project.requirements.cpuCoresPerTask} cores/task</dd></div>
-            <div><dt>Memory</dt><dd>{project.requirements.memoryMbPerTask.toLocaleString()} MB/task</dd></div>
-            <div><dt>Duration</dt><dd>{project.requirements.estimatedDurationSeconds}s/task</dd></div>
+            <div><dt>Total chunks</dt><dd>{chunks?.total ?? '—'}</dd></div>
+            <div><dt>Completed chunks</dt><dd>{chunks?.done ?? '—'}</dd></div>
             <div><dt>Renewable postponement</dt><dd>{project.requirements.postponeForRenewableEnergy ? 'Enabled' : 'Disabled'}</dd></div>
             <div><dt><IconCalendar size={14} /> Created</dt><dd>{project.createdAt}</dd></div>
-            <div><dt><IconServer size={14} /> Allocated nodes</dt><dd>{project.allocatedNodes.length ? project.allocatedNodes.join(', ') : 'None yet'}</dd></div>
           </dl>
           <div className="project-expanded-footer">
             <span><IconCpu size={15} /> {project.requirements.taskCount} total tasks</span>

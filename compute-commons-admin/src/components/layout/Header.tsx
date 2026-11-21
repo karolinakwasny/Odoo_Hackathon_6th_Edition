@@ -19,10 +19,12 @@ export function Header() {
       </div>
 
       <div className="header-actions">
-        <div className="simulation-status">
-          <span className="pulse-dot" />
-          Simulation running
-        </div>
+        {page !== 'Projects' && page !== 'Overview' && (
+          <div className="simulation-status">
+            <span className="pulse-dot" />
+            Simulation running
+          </div>
+        )}
 
         <button className="icon-button" aria-label="Notifications">
           <IconBell size={20} />
