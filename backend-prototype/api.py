@@ -22,6 +22,7 @@ from coordinator import WORKER_ENDPOINTS, CoordinatorEngine
 
 HERE = Path(__file__).parent
 PROJECT_ID, PROJECT_NAME = "math", "Math chunks"
+WORKER_COUNTRIES = ["DE", "NL", "FR"]  # one per entry in WORKER_ENDPOINTS, in the same order
 
 events: queue.Queue = queue.Queue()
 engine = CoordinatorEngine(events, chunks_dir=HERE / "chunks")
@@ -82,8 +83,8 @@ async def forward_coordinator_events() -> None:
 
 @app.on_event("startup")
 async def start_run() -> None:
-    for name, host, port in WORKER_ENDPOINTS:
-        workers.append(subprocess.Popen([sys.executable, str(HERE / "worker.py"), "--name", name, "--host", host, "--port", str(port)]))
+    for (name, host, port), country in zip(WORKER_ENDPOINTS, WORKER_COUNTRIES):
+        workers.append(subprocess.Popen([sys.executable, str(HERE / "worker.py"), "--name", name, "--country", country, "--host", host, "--port", str(port)]))
     time.sleep(1)  # give the workers a moment to start listening before the coordinator connects
     engine.start()
     asyncio.create_task(forward_coordinator_events())

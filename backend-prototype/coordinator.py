@@ -14,6 +14,7 @@ CHUNKS_DIR = Path("chunks")
 WORKER_ENDPOINTS: list[tuple[str, str, int]] = [
     ("Worker-1", "127.0.0.1", 5051),
     ("Worker-2", "127.0.0.1", 5052),
+    ("Worker-3", "127.0.0.1", 5053),
 ]
 
 # 10 distinct colors for workers (wraps around at index 10 -> 0)
@@ -44,9 +45,9 @@ class WorkerSlot:
     host: str
     port: int
     color: str
+    country: str = "UNSET"
     status: str = "offline"      # offline | idle | busy | error
     current_chunk: str | None = None
-    speed_mode: str = "M"
     sock: socket.socket | None = None
     send_lock: threading.Lock = None
 
@@ -73,6 +74,9 @@ class CoordinatorEngine:
             )
             for idx, (name, host, port) in enumerate(endpoints)
         }
+        # Country speed settings (default "M" for any country)
+        self.country_speeds: dict[str, str] = {}
+
         self.chunk_order: list[int] = []
         self.chunk_names: dict[int, str] = {}
         self.chunk_states: dict[int, str] = {}     # chunk_num -> pending | in_progress | done
@@ -91,17 +95,28 @@ class CoordinatorEngine:
 
     def emit_state(self) -> None:
         with self._state_lock:
-            workers_snap = [
-                {
+            workers_snap = []
+            countries_set = set(self.country_speeds.keys())
+
+            for w in self.workers.values():
+                if w.country and w.country != "UNSET":
+                    countries_set.add(w.country)
+                speed = self.country_speeds.get(w.country, "M")
+                workers_snap.append({
                     "name": w.name,
                     "addr": f"{w.host}:{w.port}",
+                    "country": w.country,
                     "color": w.color,
                     "status": w.status,
                     "chunk": w.current_chunk or "-",
-                    "speed": w.speed_mode,
-                }
-                for w in self.workers.values()
+                    "speed": speed,
+                })
+
+            countries_snap = [
+                {"country": c, "speed": self.country_speeds.get(c, "M")}
+                for c in sorted(countries_set)
             ]
+
             chunks_snap = [
                 {
                     "num": num,
@@ -119,6 +134,7 @@ class CoordinatorEngine:
             "state",
             {
                 "workers": workers_snap,
+                "countries": countries_snap,
                 "chunks": chunks_snap,
                 "done": done,
                 "total": total,
@@ -126,31 +142,35 @@ class CoordinatorEngine:
             },
         ))
 
-    def set_worker_speed(self, worker_name: str, mode: str) -> None:
-        normalized = mode.upper()
-        if normalized not in ("L", "M", "H"):
+    def set_country_speed(self, country: str, mode: str) -> None:
+        normalized_country = country.strip().upper()
+        normalized_mode = mode.upper()
+        if not normalized_country or normalized_mode not in ("L", "M", "H"):
             return
 
+        targets: list[tuple[str, socket.socket, threading.Lock]] = []
         with self._state_lock:
-            slot = self.workers.get(worker_name)
-            if not slot:
-                return
-            slot.speed_mode = normalized
-            sock = slot.sock
-            send_lock = slot.send_lock
+            self.country_speeds[normalized_country] = normalized_mode
+            for w in self.workers.values():
+                if w.country == normalized_country and w.sock is not None:
+                    targets.append((w.name, w.sock, w.send_lock))
 
-        self.log(f"Program 1: setting {worker_name} speed to '{normalized}'.", worker_name=worker_name)
+        self.log(f"Program 1: setting speed for country [{normalized_country}] to '{normalized_mode}'.")
         self.emit_state()
 
-        if sock is not None:
-            payload = (json.dumps({"type": "speed", "mode": normalized}) + "\n").encode("utf-8")
+        payload = (json.dumps({"type": "speed", "mode": normalized_mode}) + "\n").encode("utf-8")
+        for w_name, sock, send_lock in targets:
             try:
                 with send_lock:
                     sock.sendall(payload)
+                self.log(
+                    f"Program 1: pushed speed '{normalized_mode}' to {w_name} [{normalized_country}].",
+                    worker_name=w_name,
+                )
             except OSError as exc:
                 self.log(
-                    f"Program 1: failed sending speed '{normalized}' to {worker_name}: {exc}",
-                    worker_name=worker_name,
+                    f"Program 1: failed sending speed '{normalized_mode}' to {w_name} [{normalized_country}]: {exc}",
+                    worker_name=w_name,
                 )
 
     def start(self) -> None:
@@ -211,17 +231,38 @@ class CoordinatorEngine:
                 slot.sock = sock
                 slot.status = "idle"
                 slot.current_chunk = None
-                initial_speed = slot.speed_mode
-
-            self.log(
-                f"Program 1: connected to {slot.name} (speed={initial_speed}).",
-                worker_name=slot.name,
-            )
-            with slot.send_lock:
-                sock.sendall((json.dumps({"type": "speed", "mode": initial_speed}) + "\n").encode("utf-8"))
-            self.emit_state()
 
             buffer = ""
+            # Read initial hello message if worker sends country info
+            hello_received = False
+            while not self._stop_event.is_set() and not hello_received:
+                try:
+                    data = sock.recv(4096)
+                    if not data:
+                        raise RuntimeError(f"{slot.name} closed connection before handshake.")
+                    buffer += data.decode("utf-8")
+                    if "\n" in buffer:
+                        raw_line, buffer = buffer.split("\n", 1)
+                        msg = json.loads(raw_line)
+                        if msg.get("type") == "hello":
+                            country = str(msg.get("country", "UNSET")).strip().upper() or "UNSET"
+                            with self._state_lock:
+                                slot.country = country
+                                self.country_speeds.setdefault(country, "M")
+                                assigned_speed = self.country_speeds[country]
+                            hello_received = True
+                            self.log(
+                                f"Program 1: connected to {slot.name} (country={country}, speed={assigned_speed}).",
+                                worker_name=slot.name,
+                            )
+                            with slot.send_lock:
+                                sock.sendall(
+                                    (json.dumps({"type": "speed", "mode": assigned_speed}) + "\n").encode("utf-8")
+                                )
+                            self.emit_state()
+                except socket.timeout:
+                    continue
+
             while not self._stop_event.is_set():
                 assigned_num: int | None = None
 
@@ -242,7 +283,7 @@ class CoordinatorEngine:
                     chunk_path = self.chunk_paths[assigned_num]
                     self.log(
                         f"Program 1: assigning '{chunk_name}' (chunk #{assigned_num}) to {slot.name} "
-                        f"(marked in_progress).",
+                        f"[{slot.country}] (marked in_progress).",
                         worker_name=slot.name,
                     )
                     self.emit_state()
@@ -259,7 +300,6 @@ class CoordinatorEngine:
                     with slot.send_lock:
                         sock.sendall(msg)
 
-                    # Read progress updates until final "results" arrives for this chunk
                     finished_chunk = False
                     while not self._stop_event.is_set() and not finished_chunk:
                         try:
@@ -282,7 +322,7 @@ class CoordinatorEngine:
                                         if prog_chunk in self.chunk_percents and self.chunk_states[prog_chunk] != "done":
                                             self.chunk_percents[prog_chunk] = pct
                                     self.log(
-                                        f"Program 1: {slot.name} progress on chunk #{prog_chunk}: {pct}%",
+                                        f"Program 1: {slot.name} [{slot.country}] progress on chunk #{prog_chunk}: {pct}%",
                                         worker_name=slot.name,
                                     )
                                     self.emit_state()
@@ -297,8 +337,8 @@ class CoordinatorEngine:
                                         slot.current_chunk = None
 
                                     self.log(
-                                        f"Program 1: {slot.name} finished '{chunk_name}'; marked as DONE. "
-                                        f"Solutions: {solutions}",
+                                        f"Program 1: {slot.name} [{slot.country}] finished '{chunk_name}'; "
+                                        f"marked as DONE. Solutions: {solutions}",
                                         worker_name=slot.name,
                                     )
                                     self.emit_state()
@@ -379,11 +419,11 @@ class CoordinatorApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Program 1 — Multi-Worker Chunk Coordinator")
-        self.root.geometry("1120x640")
+        self.root.geometry("1160x660")
 
         self.log_queue: queue.Queue = queue.Queue()
         self.engine = CoordinatorEngine(self.log_queue)
-        self.speed_vars: dict[str, tk.StringVar] = {}
+        self.country_speed_vars: dict[str, tk.StringVar] = {}
         self.worker_labels: dict[str, tk.Label] = {}
         self.worker_tags: dict[str, str] = {}
         self.chunk_tiles: dict[int, tk.Label] = {}
@@ -395,7 +435,7 @@ class CoordinatorApp:
         main_pane = tk.Frame(self.root)
         main_pane.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Left side: Controls, workers, and colored logs
+        # Left side: Controls, country speeds, worker status, and colored logs
         left_panel = tk.Frame(main_pane)
         left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
 
@@ -408,41 +448,35 @@ class CoordinatorApp:
         self.chunk_summary_var = tk.StringVar(value="Chunks: 0 pending | 0 in_progress | 0 done")
         tk.Label(top, textvariable=self.chunk_summary_var).pack(side=tk.LEFT, padx=14)
 
-        workers_box = tk.LabelFrame(
+        self.country_box = tk.LabelFrame(
             left_panel,
-            text="Workers & Per-Worker Step Speed (L=0.9s, M=0.6s, H=0.3s)",
+            text="Country Speed Controls (L=0.9s, M=0.6s, H=0.3s)",
             padx=10,
             pady=6,
         )
+        self.country_box.pack(fill=tk.X, pady=(0, 8))
+
+        self.country_rows_container = tk.Frame(self.country_box)
+        self.country_rows_container.pack(fill=tk.X)
+        self.no_country_lbl = tk.Label(
+            self.country_rows_container,
+            text="No countries registered yet (start run or connect workers with a country code).",
+            fg="#666666",
+        )
+        self.no_country_lbl.pack(anchor="w")
+
+        workers_box = tk.LabelFrame(left_panel, text="Connected Workers", padx=10, pady=6)
         workers_box.pack(fill=tk.X, pady=(0, 8))
 
-        for idx, (name, slot) in enumerate(self.engine.workers.items()):
-            row = tk.Frame(workers_box, pady=2)
-            row.pack(fill=tk.X)
-
-            var = tk.StringVar(value=slot.speed_mode)
-            self.speed_vars[name] = var
-
+        for name, slot in self.engine.workers.items():
             lbl = tk.Label(
-                row,
-                text=f"{name} ({slot.host}:{slot.port}) — status: {slot.status} | chunk: -",
+                workers_box,
+                text=f"{name} [{slot.country}] ({slot.host}:{slot.port}) — status: {slot.status} | chunk: -",
                 fg=slot.color,
                 anchor="w",
             )
-            lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            lbl.pack(fill=tk.X, pady=1)
             self.worker_labels[name] = lbl
-
-            for mode in ("L", "M", "H"):
-                rb = tk.Radiobutton(
-                    row,
-                    text=mode,
-                    variable=var,
-                    value=mode,
-                    indicatoron=False,
-                    width=4,
-                    command=lambda w=name, m=mode: self.engine.set_worker_speed(w, m),
-                )
-                rb.pack(side=tk.LEFT, padx=2)
 
         self.log_area = scrolledtext.ScrolledText(
             left_panel, wrap=tk.WORD, state=tk.DISABLED, font=("Consolas", 10)
@@ -476,6 +510,44 @@ class CoordinatorApp:
 
         self.chunks_grid = tk.Frame(right_panel)
         self.chunks_grid.pack(fill=tk.BOTH, expand=True)
+
+    def _rebuild_country_controls(self, countries: list[dict]) -> None:
+        for widget in self.country_rows_container.winfo_children():
+            widget.destroy()
+        self.country_speed_vars.clear()
+
+        if not countries:
+            tk.Label(
+                self.country_rows_container,
+                text="No countries registered yet (start run or connect workers with a country code).",
+                fg="#666666",
+            ).pack(anchor="w")
+            return
+
+        for item in countries:
+            country = item["country"]
+            speed = item["speed"]
+            row = tk.Frame(self.country_rows_container, pady=2)
+            row.pack(fill=tk.X)
+
+            tk.Label(row, text=f"Country: {country}", width=16, anchor="w", font=("TkDefaultFont", 9, "bold")).pack(
+                side=tk.LEFT
+            )
+
+            var = tk.StringVar(value=speed)
+            self.country_speed_vars[country] = var
+
+            for mode in ("L", "M", "H"):
+                rb = tk.Radiobutton(
+                    row,
+                    text=mode,
+                    variable=var,
+                    value=mode,
+                    indicatoron=False,
+                    width=4,
+                    command=lambda c=country, m=mode: self.engine.set_country_speed(c, m),
+                )
+                rb.pack(side=tk.LEFT, padx=2)
 
     def _rebuild_chunk_tiles(self, chunks: list[dict]) -> None:
         for widget in self.chunks_grid.winfo_children():
@@ -518,15 +590,27 @@ class CoordinatorApp:
         self.log_area.config(state=tk.DISABLED)
 
     def _apply_state(self, payload: dict) -> None:
+        countries = payload["countries"]
+        current_keys = sorted(self.country_speed_vars.keys())
+        incoming_keys = sorted(c["country"] for c in countries)
+        if current_keys != incoming_keys:
+            self._rebuild_country_controls(countries)
+        else:
+            for item in countries:
+                c_code = item["country"]
+                if c_code in self.country_speed_vars:
+                    self.country_speed_vars[c_code].set(item["speed"])
+
         for w in payload["workers"]:
             name = w["name"]
             if name in self.worker_labels:
                 self.worker_labels[name].config(
-                    text=f"{name} ({w['addr']}) — status: {w['status']} | chunk: {w['chunk']}",
+                    text=(
+                        f"{name} [{w['country']}] ({w['addr']}) — "
+                        f"status: {w['status']} | chunk: {w['chunk']}"
+                    ),
                     fg=w["color"],
                 )
-            if name in self.speed_vars:
-                self.speed_vars[name].set(w["speed"])
 
         chunks = payload["chunks"]
         if chunks and set(self.chunk_tiles.keys()) != {c["num"] for c in chunks}:

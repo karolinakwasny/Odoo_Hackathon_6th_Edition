@@ -54,12 +54,21 @@ def load_rows_from_chunk(chunk_path: Path) -> list[tuple[float, str, float]]:
     return rows
 
 
-def run_worker(worker_name: str, host: str, port: int) -> None:
+def prompt_country_code() -> str:
+    while True:
+        code = input("Enter worker country code (e.g., BE, NL, DE, FR): ").strip().upper()
+        if code:
+            return code
+        print("Country code cannot be empty.")
+
+
+def run_worker(worker_name: str, country: str, host: str, port: int) -> None:
+    country = country.strip().upper()
     current_mode = "M"
     current_step_delay = STEP_DELAYS[current_mode]
 
     print(
-        f"Program 2 ({worker_name}): listening on {host}:{port} "
+        f"Program 2 ({worker_name} [{country}]): listening on {host}:{port} "
         f"(default speed M = {current_step_delay:.1f}s per calculation)..."
     )
 
@@ -71,13 +80,27 @@ def run_worker(worker_name: str, host: str, port: int) -> None:
         while True:
             conn, addr = server.accept()
             with conn:
-                print(f"Program 2 ({worker_name}): connected to Program 1 at {addr}")
-                buffer = ""
+                print(f"Program 2 ({worker_name} [{country}]): connected to Program 1 at {addr}")
 
+                # Announce worker identity & country to coordinator
+                hello_msg = (
+                    json.dumps({
+                        "type": "hello",
+                        "worker": worker_name,
+                        "country": country,
+                    })
+                    + "\n"
+                ).encode("utf-8")
+                conn.sendall(hello_msg)
+
+                buffer = ""
                 while True:
                     chunk = conn.recv(4096)
                     if not chunk:
-                        print(f"Program 2 ({worker_name}): Program 1 disconnected; waiting for next connection...")
+                        print(
+                            f"Program 2 ({worker_name} [{country}]): "
+                            "Program 1 disconnected; waiting for next connection..."
+                        )
                         break
 
                     buffer += chunk.decode("utf-8")
@@ -92,7 +115,7 @@ def run_worker(worker_name: str, host: str, port: int) -> None:
                                 current_mode = mode
                                 current_step_delay = STEP_DELAYS[mode]
                                 print(
-                                    f"Program 2 ({worker_name}): speed set to {current_mode} "
+                                    f"Program 2 ({worker_name} [{country}]): speed set to {current_mode} "
                                     f"({current_step_delay:.1f}s per calculation)."
                                 )
 
@@ -104,7 +127,7 @@ def run_worker(worker_name: str, host: str, port: int) -> None:
                             total_rows = len(rows)
 
                             print(
-                                f"Program 2 ({worker_name}): working on '{chunk_name}' "
+                                f"Program 2 ({worker_name} [{country}]): working on '{chunk_name}' "
                                 f"(chunk #{chunk_num}, {total_rows} calculations)..."
                             )
 
@@ -128,12 +151,12 @@ def run_worker(worker_name: str, host: str, port: int) -> None:
                                 )
                                 conn.sendall(progress_msg.encode("utf-8"))
                                 print(
-                                    f"Program 2 ({worker_name}): chunk #{chunk_num} at {percent}% "
-                                    f"({idx}/{total_rows})"
+                                    f"Program 2 ({worker_name} [{country}]): chunk #{chunk_num} "
+                                    f"at {percent}% ({idx}/{total_rows})"
                                 )
 
                             print(
-                                f"Program 2 ({worker_name}): finished '{chunk_name}'; "
+                                f"Program 2 ({worker_name} [{country}]): finished '{chunk_name}'; "
                                 f"sending {len(solutions)} solutions back."
                             )
                             response = (
@@ -147,17 +170,20 @@ def run_worker(worker_name: str, host: str, port: int) -> None:
                             conn.sendall(response.encode("utf-8"))
 
                         elif msg_type == "shutdown":
-                            print(f"Program 2 ({worker_name}): received shutdown signal.")
+                            print(f"Program 2 ({worker_name} [{country}]): received shutdown signal.")
                             return
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Math chunk worker")
     parser.add_argument("--name", default="worker-1", help="Worker label")
+    parser.add_argument("--country", default=None, help="Country code (e.g., BE, NL, DE)")
     parser.add_argument("--host", default="127.0.0.1", help="Bind host")
     parser.add_argument("--port", type=int, default=5051, help="Bind port")
     args = parser.parse_args()
-    run_worker(args.name, args.host, args.port)
+
+    country = args.country if args.country else prompt_country_code()
+    run_worker(args.name, country, args.host, args.port)
 
 
 if __name__ == "__main__":
