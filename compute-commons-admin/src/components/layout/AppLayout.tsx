@@ -1,12 +1,8 @@
-import type { ReactNode } from "react"
+import { Outlet } from "react-router-dom"
 import { Sidebar } from "./Sidebar"
 import { Header } from "./Header"
 
-interface Props {
-  children: ReactNode
-}
-
-export function AppLayout({ children }: Props) {
+export function AppLayout() {
   return (
     <div className="app-layout">
       <Sidebar />
@@ -14,7 +10,7 @@ export function AppLayout({ children }: Props) {
       <main className="main-content">
         <Header />
         <div className="page-content">
-          {children}
+          <Outlet />
         </div>
       </main>
     </div>

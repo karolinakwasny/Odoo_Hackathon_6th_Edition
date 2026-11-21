@@ -2,8 +2,10 @@ import { dashboardStats } from "../../mocks/dashboard"
 import { StatCard } from "./StatCard"
 import { SchedulerFeed } from "./SchedulerFeed"
 import { IconArrowUpRight, IconMapPin } from "@tabler/icons-react"
+import { useNavigate } from "react-router-dom"
 
 export function OverviewPage() {
+  const navigate = useNavigate()
   return (
     <>
       <div className="welcome-row">
@@ -12,7 +14,7 @@ export function OverviewPage() {
           <p>Here's what's happening across your network.</p>
         </div>
 
-        <button className="primary-button">
+        <button className="primary-button" onClick={() => navigate('/projects')}>
           + New project
         </button>
       </div>

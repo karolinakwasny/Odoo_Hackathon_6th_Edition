@@ -1,0 +1,67 @@
+import { useMemo, useState } from 'react'
+import { Button, Select, TextInput } from '@mantine/core'
+import { IconPlus, IconSearch } from '@tabler/icons-react'
+import { PageHeader } from '../../../components/ui/PageHeader'
+import { EmptyState } from '../../../components/ui/EmptyState'
+import { ProjectCard } from '../components/ProjectCard'
+import { ProjectForm } from '../components/ProjectForm'
+import { useProjectStore } from '../../../store/projectStore'
+import type { CreateProjectInput, ProjectStatus } from '../types'
+
+export function ProjectsPage() {
+  const [opened, setOpened] = useState(false)
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState<ProjectStatus | 'All'>('All')
+  const projects = useProjectStore((state) => state.projects)
+  const add = useProjectStore((state) => state.add)
+
+  const filtered = useMemo(() => projects.filter((project) =>
+    project.name.toLowerCase().includes(search.toLowerCase())
+    && (status === 'All' || project.status === status),
+  ), [projects, search, status])
+
+  const stats = [
+    ['Total projects', projects.length],
+    ['Running', projects.filter((project) => project.status === 'Running').length],
+    ['Queued', projects.filter((project) => project.status === 'Queued').length],
+    ['Completed', projects.filter((project) => project.status === 'Completed').length],
+  ]
+
+  function createProject(input: CreateProjectInput) {
+    add(input)
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Projects"
+        description="Plan and monitor distributed research workloads."
+        actions={<Button leftSection={<IconPlus size={17} />} onClick={() => setOpened(true)}>New project</Button>}
+      />
+
+      <div className="stats-grid project-stats">
+        {stats.map(([label, value]) => (
+          <div className="stat-card compact-stat" key={String(label)}>
+            <span className="stat-label">{String(label)}</span>
+            <strong className="stat-value">{String(value)}</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="project-toolbar">
+        <TextInput value={search} onChange={(event) => setSearch(event.currentTarget.value)} leftSection={<IconSearch size={16} />} placeholder="Search projects" aria-label="Search projects" />
+        <Select value={status} onChange={(value) => setStatus((value ?? 'All') as ProjectStatus | 'All')} data={['All', 'Running', 'Queued', 'Paused', 'Completed']} aria-label="Filter by status" />
+      </div>
+
+      {filtered.length > 0 ? (
+        <div className="project-grid">
+          {filtered.map((project) => <ProjectCard project={project} key={project.id} />)}
+        </div>
+      ) : (
+        <EmptyState description="Try a different name or status filter." />
+      )}
+
+      <ProjectForm opened={opened} onClose={() => setOpened(false)} onSubmit={createProject} />
+    </>
+  )
+}

@@ -1,16 +1,13 @@
-import React from "react"
-import ReactDOM from "react-dom/client"
-import { MantineProvider } from "@mantine/core"
-import "@mantine/core/styles.css"
-import "./styles/global.css"
-
-import App from "./App"
-import { theme } from "./styles/theme"
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import './styles/global.css'
+import { Providers } from './app/providers'
+import { AppRouter } from './app/router'
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <MantineProvider theme={theme}>
-      <App />
-    </MantineProvider>
+    <Providers>
+      <AppRouter />
+    </Providers>
   </React.StrictMode>
 )

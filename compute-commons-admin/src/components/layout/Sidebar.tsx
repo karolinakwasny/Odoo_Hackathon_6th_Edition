@@ -6,12 +6,13 @@ import {
   IconSettings,
   IconLeaf,
 } from "@tabler/icons-react"
+import { NavLink } from "react-router-dom"
 
 const navigation = [
-  { label: "Overview", icon: IconLayoutDashboard, active: true },
-  { label: "Projects", icon: IconFolders },
-  { label: "Network", icon: IconMap },
-  { label: "Simulation", icon: IconActivity },
+  { label: "Overview", icon: IconLayoutDashboard, to: "/" },
+  { label: "Projects", icon: IconFolders, to: "/projects" },
+  { label: "Network", icon: IconMap, to: "/network" },
+  { label: "Simulation", icon: IconActivity, to: "/simulation" },
 ]
 
 export function Sidebar() {
@@ -30,14 +31,16 @@ export function Sidebar() {
       <div className="nav-label">WORKSPACE</div>
 
       <nav>
-        {navigation.map(({ label, icon: Icon, active }) => (
-          <button
+        {navigation.map(({ label, icon: Icon, to }) => (
+          <NavLink
             key={label}
-            className={`nav-item ${active ? "active" : ""}`}
+            to={to}
+            end={to === "/"}
+            className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
           >
             <Icon size={19} stroke={1.8} />
             {label}
-          </button>
+          </NavLink>
         ))}
       </nav>
 

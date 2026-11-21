@@ -1,4 +1,10 @@
-export const dashboardStats = [
+export const dashboardStats: Array<{
+  label: string
+  value: string
+  change: string
+  icon: 'nodes' | 'tasks' | 'energy' | 'power'
+  color: string
+}> = [
   {
     label: "Connected nodes",
     value: "128",
