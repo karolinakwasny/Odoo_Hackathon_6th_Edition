@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Button, Checkbox, Group, Progress, SegmentedControl, Select, Slider, TextInput } from '@mantine/core'
+import { Button, Group, MultiSelect, Progress, SegmentedControl, Select, Slider, TextInput } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconLeaf, IconMicroscope, IconPlanet, IconTrees, IconWorld, IconSchool, IconBrandOpenSource } from '@tabler/icons-react'
 import { useUserStore } from '../../../store/userStore'
@@ -33,6 +33,10 @@ export function OnboardingShell() {
   function continueStep() {
     if (stepIndex === 0 && store.username.trim().length < 3) {
       setUsernameError('Username must be at least 3 characters')
+      return
+    }
+    if (stepIndex === 0 && store.profileType === 'Organisation' && !store.organisationName?.trim()) {
+      notifications.show({ title: 'Organisation name required', message: 'Enter a name for your organisation.', color: 'red' })
       return
     }
     setUsernameError('')
@@ -69,8 +73,26 @@ export function OnboardingShell() {
 
         {stepIndex === 0 && (
           <div className="onboarding-form">
+            <div className="form-span-2">
+              <label>Profile type</label>
+              <SegmentedControl
+                fullWidth
+                value={store.profileType}
+                onChange={(value) => store.setProfile({ profileType: value as UserProfile['profileType'] })}
+                data={['Individual', 'Organisation']}
+              />
+            </div>
             <TextInput label="Username" required value={store.username} error={usernameError} onChange={(event) => store.setProfile({ username: event.currentTarget.value })} />
             <TextInput label="Display name (optional)" value={store.displayName ?? ''} onChange={(event) => store.setProfile({ displayName: event.currentTarget.value })} />
+            {store.profileType === 'Organisation' && (
+              <TextInput
+                className="form-span-2"
+                label="Organisation name"
+                required
+                value={store.organisationName ?? ''}
+                onChange={(event) => store.setProfile({ organisationName: event.currentTarget.value })}
+              />
+            )}
           </div>
         )}
         {stepIndex === 1 && (
@@ -101,11 +123,17 @@ export function OnboardingShell() {
             <label>Device type</label>
             <SegmentedControl fullWidth value={store.deviceType} onChange={(value) => store.setProfile({ deviceType: value as UserProfile['deviceType'] })} data={['Desktop','Laptop','Server']} />
             <div className="range-control"><div><label>Maximum CPU usage</label><strong>{store.cpuUsage}%</strong></div><Slider value={store.cpuUsage} onChange={(value) => store.setProfile({ cpuUsage: value })} marks={[{ value: 25, label: '25%' },{ value: 50, label: '50%' },{ value: 75, label: '75%' },{ value: 100, label: '100%' }]} /></div>
-            <Select label="Availability" value={store.availability} onChange={(value) => store.setProfile({ availability: (value ?? 'When idle') as UserProfile['availability'] })} data={['Always','When idle','Scheduled hours']} />
-            {store.availability === 'Scheduled hours' && <TextInput label="Active hours" placeholder="18:00–22:00" value={store.activeHours ?? ''} onChange={(event) => store.setProfile({ activeHours: event.currentTarget.value })} />}
-            <Checkbox checked={store.prioritizeRenewableEnergy} onChange={(event) => store.setProfile({ prioritizeRenewableEnergy: event.currentTarget.checked })} label="Prioritize renewable energy" description="Favor contribution periods when cleaner electricity is available." />
+            <MultiSelect
+              label="Availability"
+              description="Choose the times you may be available to contribute."
+              value={store.availability}
+              onChange={(value) => store.setProfile({ availability: value as UserProfile['availability'] })}
+              data={['Mornings', 'Afternoons', 'Evenings']}
+              clearable
+            />
+            {/* <Checkbox checked={store.prioritizeRenewableEnergy} onChange={(event) => store.setProfile({ prioritizeRenewableEnergy: event.currentTarget.checked })} label="Prioritize renewable energy" description="Favor contribution periods when cleaner electricity is available." />
             <Checkbox checked={store.allowPostponement} onChange={(event) => store.setProfile({ allowPostponement: event.currentTarget.checked })} label="Allow tasks to wait for cleaner energy" description="Low-priority tasks may be postponed until cleaner capacity is available." />
-            <div className="form-explanation">You remain in control. You can pause your contribution at any time from My Computer.</div>
+            <div className="form-explanation">You remain in control. You can pause your contribution at any time from My Computer.</div> */}
           </div>
         )}
 
