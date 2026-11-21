@@ -2,6 +2,7 @@ import {
   IconLayoutDashboard,
   IconFolders,
   IconMap,
+  IconActivity,
   IconSettings,
   IconLeaf,
 } from "@tabler/icons-react"
