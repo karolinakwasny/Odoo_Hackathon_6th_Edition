@@ -1,15 +1,25 @@
 import argparse
 import csv
 import json
+import re
 import socket
 import time
 from pathlib import Path
 
-SPEED_DELAYS = {
-    "L": 3.0,
-    "M": 2.0,
-    "H": 1.0,
+STEP_DELAYS = {
+    "L": 0.9,
+    "M": 0.6,
+    "H": 0.3,
 }
+
+PROJECT_ID = "wildfire"
+
+
+def extract_chunk_number(chunk_name: str) -> int:
+    match = re.search(r"(\d+)", chunk_name)
+    if not match:
+        raise ValueError(f"Could not extract numeric chunk ID from '{chunk_name}'")
+    return int(match.group(1))
 
 
 def evaluate_row(left: float, op: str, right: float) -> float:
@@ -26,30 +36,32 @@ def evaluate_row(left: float, op: str, right: float) -> float:
     raise ValueError(f"Unsupported operator: {op}")
 
 
-def evaluate_chunk_file(chunk_path: Path) -> list[float]:
-    solutions: list[float] = []
+def load_rows_from_chunk(chunk_path: Path) -> list[tuple[float, str, float]]:
+    rows: list[tuple[float, str, float]] = []
     with chunk_path.open(mode="r", newline="", encoding="utf-8") as f:
         reader = csv.reader(f)
         header = next(reader, None)
         if header is not None:
             try:
-                float(header[0])
-                solutions.append(evaluate_row(float(header[0]), str(header[1]), float(header[2])))
+                rows.append((float(header[0]), str(header[1]), float(header[2])))
             except (ValueError, IndexError):
                 pass
 
         for row in reader:
             if not row:
                 continue
-            solutions.append(evaluate_row(float(row[0]), str(row[1]), float(row[2])))
-    return solutions
+            rows.append((float(row[0]), str(row[1]), float(row[2])))
+    return rows
 
 
 def run_worker(worker_name: str, host: str, port: int) -> None:
     current_mode = "M"
-    current_delay = SPEED_DELAYS[current_mode]
+    current_step_delay = STEP_DELAYS[current_mode]
 
-    print(f"Program 2 ({worker_name}): listening on {host}:{port} (default speed M = {current_delay:.1f}s)...")
+    print(
+        f"Program 2 ({worker_name}): listening on {host}:{port} "
+        f"(default speed M = {current_step_delay:.1f}s per calculation)..."
+    )
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -76,28 +88,54 @@ def run_worker(worker_name: str, host: str, port: int) -> None:
 
                         if msg_type == "speed":
                             mode = str(msg.get("mode", "")).upper()
-                            if mode in SPEED_DELAYS:
+                            if mode in STEP_DELAYS:
                                 current_mode = mode
-                                current_delay = SPEED_DELAYS[mode]
+                                current_step_delay = STEP_DELAYS[mode]
                                 print(
                                     f"Program 2 ({worker_name}): speed set to {current_mode} "
-                                    f"({current_delay:.1f}s for upcoming chunks)."
+                                    f"({current_step_delay:.1f}s per calculation)."
                                 )
 
                         elif msg_type == "chunk":
                             chunk_name = msg["chunk_name"]
                             chunk_path = Path(msg["chunk_path"])
-                            print(f"Program 2 ({worker_name}): working on '{chunk_name}'...")
-
-                            solutions = evaluate_chunk_file(chunk_path)
+                            chunk_num = extract_chunk_number(chunk_name)
+                            rows = load_rows_from_chunk(chunk_path)
+                            total_rows = len(rows)
 
                             print(
-                                f"Program 2 ({worker_name}): finished calculating '{chunk_name}'; "
-                                f"pausing {current_delay:.1f}s (mode {current_mode}) before sending..."
+                                f"Program 2 ({worker_name}): working on '{chunk_name}' "
+                                f"(chunk #{chunk_num}, {total_rows} calculations)..."
                             )
-                            time.sleep(current_delay)
 
-                            print(f"Program 2 ({worker_name}): sending {len(solutions)} solutions for '{chunk_name}'.")
+                            solutions: list[float] = []
+                            for idx, (left, op, right) in enumerate(rows, start=1):
+                                if idx > 1:
+                                    time.sleep(current_step_delay)
+
+                                sol = evaluate_row(left, op, right)
+                                solutions.append(sol)
+
+                                percent = round((idx / total_rows) * 100) if total_rows > 0 else 100
+                                progress_msg = (
+                                    json.dumps({
+                                        "type": "chunk_progress",
+                                        "project_id": PROJECT_ID,
+                                        "chunk": chunk_num,
+                                        "percent": percent,
+                                    })
+                                    + "\n"
+                                )
+                                conn.sendall(progress_msg.encode("utf-8"))
+                                print(
+                                    f"Program 2 ({worker_name}): chunk #{chunk_num} at {percent}% "
+                                    f"({idx}/{total_rows})"
+                                )
+
+                            print(
+                                f"Program 2 ({worker_name}): finished '{chunk_name}'; "
+                                f"sending {len(solutions)} solutions back."
+                            )
                             response = (
                                 json.dumps({
                                     "type": "results",

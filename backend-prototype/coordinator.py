@@ -1,11 +1,12 @@
 import json
 import queue
+import re
 import socket
 import threading
 import tkinter as tk
 from dataclasses import dataclass
 from pathlib import Path
-from tkinter import scrolledtext
+from tkinter import scrolledtext, ttk
 
 CHUNKS_DIR = Path("chunks")
 
@@ -28,6 +29,13 @@ WORKER_COLORS: list[str] = [
     "#283593",  # 9: Indigo
     "#558B2F",  # 10: Olive Green
 ]
+
+
+def extract_chunk_number(chunk_name: str) -> int:
+    match = re.search(r"(\d+)", chunk_name)
+    if not match:
+        raise ValueError(f"Could not extract numeric chunk ID from '{chunk_name}'")
+    return int(match.group(1))
 
 
 @dataclass
@@ -65,9 +73,12 @@ class CoordinatorEngine:
             )
             for idx, (name, host, port) in enumerate(endpoints)
         }
-        self.chunk_states: dict[str, str] = {}   # chunk_name -> pending | in_progress | done
-        self.chunk_paths: dict[str, Path] = {}
-        self.results: dict[str, list[float]] = {}
+        self.chunk_order: list[int] = []
+        self.chunk_names: dict[int, str] = {}
+        self.chunk_states: dict[int, str] = {}     # chunk_num -> pending | in_progress | done
+        self.chunk_percents: dict[int, int] = {}   # chunk_num -> 0..100
+        self.chunk_paths: dict[int, Path] = {}
+        self.results: dict[int, list[float]] = {}
 
         self._state_lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -91,8 +102,29 @@ class CoordinatorEngine:
                 }
                 for w in self.workers.values()
             ]
-            chunks_snap = dict(self.chunk_states)
-        self.log_queue.put(("state", {"workers": workers_snap, "chunks": chunks_snap}))
+            chunks_snap = [
+                {
+                    "num": num,
+                    "name": self.chunk_names[num],
+                    "state": self.chunk_states[num],
+                    "percent": self.chunk_percents[num],
+                }
+                for num in self.chunk_order
+            ]
+            total = len(chunks_snap)
+            done = sum(1 for c in chunks_snap if c["state"] == "done")
+            overall_pct = (done / total * 100.0) if total > 0 else 0.0
+
+        self.log_queue.put((
+            "state",
+            {
+                "workers": workers_snap,
+                "chunks": chunks_snap,
+                "done": done,
+                "total": total,
+                "overall_pct": overall_pct,
+            },
+        ))
 
     def set_worker_speed(self, worker_name: str, mode: str) -> None:
         normalized = mode.upper()
@@ -140,9 +172,26 @@ class CoordinatorEngine:
             self.log(f"Program 1: no 'chunk_*.csv' files found in '{self.chunks_dir}'.")
             return False
 
+        order: list[int] = []
+        names: dict[int, str] = {}
+        states: dict[int, str] = {}
+        percents: dict[int, int] = {}
+        paths: dict[int, Path] = {}
+
+        for p in csv_files:
+            num = extract_chunk_number(p.name)
+            order.append(num)
+            names[num] = p.name
+            states[num] = "pending"
+            percents[num] = 0
+            paths[num] = p
+
         with self._state_lock:
-            self.chunk_states = {p.name: "pending" for p in csv_files}
-            self.chunk_paths = {p.name: p for p in csv_files}
+            self.chunk_order = order
+            self.chunk_names = names
+            self.chunk_states = states
+            self.chunk_percents = percents
+            self.chunk_paths = paths
             self.results = {}
 
         self.log(f"Program 1: loaded {len(csv_files)} chunks into memory as 'pending'.")
@@ -155,7 +204,7 @@ class CoordinatorEngine:
                 worker_name=slot.name,
             )
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1.0)
+            sock.settimeout(0.5)
             sock.connect((slot.host, slot.port))
 
             with self._state_lock:
@@ -174,23 +223,26 @@ class CoordinatorEngine:
 
             buffer = ""
             while not self._stop_event.is_set():
-                assigned_chunk: str | None = None
+                assigned_num: int | None = None
 
                 # Claim at most ONE pending chunk for this worker
                 with self._state_lock:
                     if slot.status == "idle" and slot.current_chunk is None:
-                        for name, state in self.chunk_states.items():
-                            if state == "pending":
-                                self.chunk_states[name] = "in_progress"
+                        for num in self.chunk_order:
+                            if self.chunk_states[num] == "pending":
+                                self.chunk_states[num] = "in_progress"
+                                self.chunk_percents[num] = 0
                                 slot.status = "busy"
-                                slot.current_chunk = name
-                                assigned_chunk = name
+                                slot.current_chunk = self.chunk_names[num]
+                                assigned_num = num
                                 break
 
-                if assigned_chunk is not None:
-                    chunk_path = self.chunk_paths[assigned_chunk]
+                if assigned_num is not None:
+                    chunk_name = self.chunk_names[assigned_num]
+                    chunk_path = self.chunk_paths[assigned_num]
                     self.log(
-                        f"Program 1: assigning '{assigned_chunk}' to {slot.name} (marked in_progress).",
+                        f"Program 1: assigning '{chunk_name}' (chunk #{assigned_num}) to {slot.name} "
+                        f"(marked in_progress).",
                         worker_name=slot.name,
                     )
                     self.emit_state()
@@ -198,7 +250,7 @@ class CoordinatorEngine:
                     msg = (
                         json.dumps({
                             "type": "chunk",
-                            "chunk_name": assigned_chunk,
+                            "chunk_name": chunk_name,
                             "chunk_path": str(chunk_path.resolve()),
                         })
                         + "\n"
@@ -207,38 +259,54 @@ class CoordinatorEngine:
                     with slot.send_lock:
                         sock.sendall(msg)
 
-                    # Wait for this worker's result on the assigned chunk
-                    reply = None
-                    while not self._stop_event.is_set() and reply is None:
+                    # Read progress updates until final "results" arrives for this chunk
+                    finished_chunk = False
+                    while not self._stop_event.is_set() and not finished_chunk:
                         try:
                             data = sock.recv(4096)
                             if not data:
                                 raise RuntimeError(
-                                    f"{slot.name} closed connection while working on '{assigned_chunk}'."
+                                    f"{slot.name} closed connection while working on '{chunk_name}'."
                                 )
                             buffer += data.decode("utf-8")
-                            if "\n" in buffer:
+
+                            while "\n" in buffer:
                                 raw_line, buffer = buffer.split("\n", 1)
                                 reply = json.loads(raw_line)
+                                r_type = reply.get("type")
+
+                                if r_type == "chunk_progress":
+                                    prog_chunk = int(reply.get("chunk", assigned_num))
+                                    pct = int(reply.get("percent", 0))
+                                    with self._state_lock:
+                                        if prog_chunk in self.chunk_percents and self.chunk_states[prog_chunk] != "done":
+                                            self.chunk_percents[prog_chunk] = pct
+                                    self.log(
+                                        f"Program 1: {slot.name} progress on chunk #{prog_chunk}: {pct}%",
+                                        worker_name=slot.name,
+                                    )
+                                    self.emit_state()
+
+                                elif r_type == "results":
+                                    solutions = reply.get("solutions", [])
+                                    with self._state_lock:
+                                        self.chunk_states[assigned_num] = "done"
+                                        self.chunk_percents[assigned_num] = 100
+                                        self.results[assigned_num] = solutions
+                                        slot.status = "idle"
+                                        slot.current_chunk = None
+
+                                    self.log(
+                                        f"Program 1: {slot.name} finished '{chunk_name}'; marked as DONE. "
+                                        f"Solutions: {solutions}",
+                                        worker_name=slot.name,
+                                    )
+                                    self.emit_state()
+                                    finished_chunk = True
+                                    break
                         except socket.timeout:
                             continue
-
-                    if reply is not None and reply.get("type") == "results":
-                        solutions = reply.get("solutions", [])
-                        with self._state_lock:
-                            self.chunk_states[assigned_chunk] = "done"
-                            self.results[assigned_chunk] = solutions
-                            slot.status = "idle"
-                            slot.current_chunk = None
-
-                        self.log(
-                            f"Program 1: {slot.name} finished '{assigned_chunk}'; marked as DONE. "
-                            f"Solutions: {solutions}",
-                            worker_name=slot.name,
-                        )
-                        self.emit_state()
                 else:
-                    # Check if all chunks are done
                     with self._state_lock:
                         all_done = all(st == "done" for st in self.chunk_states.values())
                     if all_done:
@@ -247,12 +315,18 @@ class CoordinatorEngine:
 
         except Exception as exc:
             with self._state_lock:
-                if slot.current_chunk and self.chunk_states.get(slot.current_chunk) == "in_progress":
-                    self.chunk_states[slot.current_chunk] = "pending"
-                    self.log(
-                        f"Program 1: returned '{slot.current_chunk}' to pending after {slot.name} error.",
-                        worker_name=slot.name,
-                    )
+                if slot.current_chunk:
+                    try:
+                        c_num = extract_chunk_number(slot.current_chunk)
+                        if self.chunk_states.get(c_num) == "in_progress":
+                            self.chunk_states[c_num] = "pending"
+                            self.chunk_percents[c_num] = 0
+                            self.log(
+                                f"Program 1: returned '{slot.current_chunk}' to pending after {slot.name} error.",
+                                worker_name=slot.name,
+                            )
+                    except ValueError:
+                        pass
                 slot.status = "error"
                 slot.current_chunk = None
                 if slot.sock is not None:
@@ -305,32 +379,45 @@ class CoordinatorApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Program 1 — Multi-Worker Chunk Coordinator")
-        self.root.geometry("860x580")
+        self.root.geometry("1120x640")
 
         self.log_queue: queue.Queue = queue.Queue()
         self.engine = CoordinatorEngine(self.log_queue)
         self.speed_vars: dict[str, tk.StringVar] = {}
         self.worker_labels: dict[str, tk.Label] = {}
         self.worker_tags: dict[str, str] = {}
+        self.chunk_tiles: dict[int, tk.Label] = {}
 
         self._build_ui()
         self._poll_queue()
 
     def _build_ui(self) -> None:
-        top = tk.Frame(self.root, padx=12, pady=10)
-        top.pack(fill=tk.X)
+        main_pane = tk.Frame(self.root)
+        main_pane.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Left side: Controls, workers, and colored logs
+        left_panel = tk.Frame(main_pane)
+        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+
+        top = tk.Frame(left_panel)
+        top.pack(fill=tk.X, pady=(0, 8))
 
         self.start_btn = tk.Button(top, text="Start Run", command=self.on_start)
         self.start_btn.pack(side=tk.LEFT)
 
         self.chunk_summary_var = tk.StringVar(value="Chunks: 0 pending | 0 in_progress | 0 done")
-        tk.Label(top, textvariable=self.chunk_summary_var).pack(side=tk.LEFT, padx=16)
+        tk.Label(top, textvariable=self.chunk_summary_var).pack(side=tk.LEFT, padx=14)
 
-        workers_box = tk.LabelFrame(self.root, text="Workers & Per-Worker Speed (L=3s, M=2s, H=1s)", padx=12, pady=8)
-        workers_box.pack(fill=tk.X, padx=12, pady=(0, 10))
+        workers_box = tk.LabelFrame(
+            left_panel,
+            text="Workers & Per-Worker Step Speed (L=0.9s, M=0.6s, H=0.3s)",
+            padx=10,
+            pady=6,
+        )
+        workers_box.pack(fill=tk.X, pady=(0, 8))
 
         for idx, (name, slot) in enumerate(self.engine.workers.items()):
-            row = tk.Frame(workers_box, pady=3)
+            row = tk.Frame(workers_box, pady=2)
             row.pack(fill=tk.X)
 
             var = tk.StringVar(value=slot.speed_mode)
@@ -358,14 +445,60 @@ class CoordinatorApp:
                 rb.pack(side=tk.LEFT, padx=2)
 
         self.log_area = scrolledtext.ScrolledText(
-            self.root, wrap=tk.WORD, state=tk.DISABLED, font=("Consolas", 10)
+            left_panel, wrap=tk.WORD, state=tk.DISABLED, font=("Consolas", 10)
         )
-        self.log_area.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 12))
+        self.log_area.pack(fill=tk.BOTH, expand=True)
 
         for idx, (name, slot) in enumerate(self.engine.workers.items()):
             tag_name = f"worker_{idx % len(WORKER_COLORS)}"
             self.worker_tags[name] = tag_name
             self.log_area.tag_config(tag_name, foreground=slot.color)
+
+        # Right side: Project completion visualizer (Red = not done, Green = done)
+        right_panel = tk.LabelFrame(main_pane, text="Project Completion Visualizer", width=330, padx=12, pady=12)
+        right_panel.pack(side=tk.RIGHT, fill=tk.Y)
+        right_panel.pack_propagate(False)
+
+        self.overall_pct_var = tk.StringVar(value="0.0% Completed (0 / 0 chunks)")
+        tk.Label(
+            right_panel,
+            textvariable=self.overall_pct_var,
+            font=("TkDefaultFont", 11, "bold"),
+        ).pack(anchor="w", pady=(0, 6))
+
+        self.progress_bar = ttk.Progressbar(right_panel, orient="horizontal", mode="determinate", maximum=100)
+        self.progress_bar.pack(fill=tk.X, pady=(0, 12))
+
+        legend = tk.Frame(right_panel)
+        legend.pack(fill=tk.X, pady=(0, 10))
+        tk.Label(legend, text="  Not Done  ", bg="#C62828", fg="white", padx=6, pady=2).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Label(legend, text="  Done  ", bg="#2E7D32", fg="white", padx=6, pady=2).pack(side=tk.LEFT)
+
+        self.chunks_grid = tk.Frame(right_panel)
+        self.chunks_grid.pack(fill=tk.BOTH, expand=True)
+
+    def _rebuild_chunk_tiles(self, chunks: list[dict]) -> None:
+        for widget in self.chunks_grid.winfo_children():
+            widget.destroy()
+        self.chunk_tiles.clear()
+
+        cols = 4
+        for idx, ch in enumerate(chunks):
+            num = ch["num"]
+            r, c = divmod(idx, cols)
+            tile = tk.Label(
+                self.chunks_grid,
+                text=f"#{num}\n{ch['percent']}%",
+                width=7,
+                height=2,
+                bg="#C62828",
+                fg="white",
+                font=("Consolas", 9, "bold"),
+                relief=tk.RAISED,
+                bd=1,
+            )
+            tile.grid(row=r, column=c, padx=4, pady=4)
+            self.chunk_tiles[num] = tile
 
     def on_start(self) -> None:
         self.start_btn.config(state=tk.DISABLED)
@@ -395,10 +528,29 @@ class CoordinatorApp:
             if name in self.speed_vars:
                 self.speed_vars[name].set(w["speed"])
 
-        states = list(payload["chunks"].values())
-        p_cnt = sum(1 for s in states if s == "pending")
-        ip_cnt = sum(1 for s in states if s == "in_progress")
-        d_cnt = sum(1 for s in states if s == "done")
+        chunks = payload["chunks"]
+        if chunks and set(self.chunk_tiles.keys()) != {c["num"] for c in chunks}:
+            self._rebuild_chunk_tiles(chunks)
+
+        for ch in chunks:
+            num = ch["num"]
+            tile = self.chunk_tiles.get(num)
+            if tile is not None:
+                is_done = ch["state"] == "done"
+                bg = "#2E7D32" if is_done else "#C62828"
+                pct_text = "100%" if is_done else f"{ch['percent']}%"
+                tile.config(text=f"#{num}\n{pct_text}", bg=bg)
+
+        done = payload["done"]
+        total = payload["total"]
+        overall_pct = payload["overall_pct"]
+
+        self.overall_pct_var.set(f"{overall_pct:.1f}% Completed ({done} / {total} chunks)")
+        self.progress_bar["value"] = overall_pct
+
+        p_cnt = sum(1 for c in chunks if c["state"] == "pending")
+        ip_cnt = sum(1 for c in chunks if c["state"] == "in_progress")
+        d_cnt = done
         self.chunk_summary_var.set(
             f"Chunks: {p_cnt} pending | {ip_cnt} in_progress | {d_cnt} done"
         )
