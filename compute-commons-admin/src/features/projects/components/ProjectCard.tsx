@@ -1,35 +1,86 @@
-import { IconCpu, IconCalendar, IconChevronRight } from '@tabler/icons-react'
-import { Progress } from '@mantine/core'
+import {
+  IconCalendar,
+  IconChevronDown,
+  IconCpu,
+  IconDots,
+  IconLeaf,
+  IconMicroscope,
+  IconServer,
+  IconWorld,
+} from '@tabler/icons-react'
+import { Button, Progress } from '@mantine/core'
 import { useNavigate } from 'react-router-dom'
-import type { Project } from '../types'
+import type { Project, ProjectCategory } from '../types'
 import { StatusBadge } from '../../../components/ui/StatusBadge'
 
-export function ProjectCard({ project }: { project: Project }) {
+interface ProjectCardProps {
+  project: Project
+  expanded: boolean
+  onToggle: () => void
+}
+
+const categoryIcons = {
+  Climate: IconWorld,
+  Biodiversity: IconLeaf,
+  Research: IconMicroscope,
+  Other: IconDots,
+} satisfies Record<ProjectCategory, typeof IconWorld>
+
+export function ProjectCard({ project, expanded, onToggle }: ProjectCardProps) {
   const navigate = useNavigate()
   const total = project.requirements.taskCount
   const progress = total > 0 ? Math.round(project.completedTasks / total * 100) : 0
+  const CategoryIcon = categoryIcons[project.category]
+
   return (
-    <article className="project-card" role="button" tabIndex={0} onClick={() => navigate(`/projects/${project.id}`)} onKeyDown={(event) => {
-      if (event.key === 'Enter') navigate(`/projects/${project.id}`)
-    }}>
-      <div className="project-card-top">
-        <div>
-          <span className="project-category">{project.category}</span>
-          <h3>{project.name}</h3>
+    <article className={`project-list-item${expanded ? ' expanded' : ''}`}>
+      <button
+        type="button"
+        className="project-list-trigger"
+        aria-expanded={expanded}
+        onClick={onToggle}
+      >
+        <span className={`project-category-icon ${project.category.toLowerCase()}`}>
+          <CategoryIcon size={21} stroke={1.7} />
+        </span>
+        <span className="project-list-main">
+          <span className="project-list-title-row">
+            <strong>{project.name}</strong>
+            <StatusBadge status={project.status} />
+          </span>
+          <span className="project-list-summary">
+            <span>{project.category}</span>
+            <span>{project.completedTasks} / {total} tasks</span>
+            <span>{progress}% complete</span>
+          </span>
+        </span>
+        <span className="project-list-progress">
+          <Progress value={progress} color="forest" size="sm" radius="xl" />
+        </span>
+        <IconChevronDown className="project-expand-icon" size={19} />
+      </button>
+
+      {expanded && (
+        <div className="project-expanded-content">
+          <p className="project-description">{project.description}</p>
+          <dl className="project-detail-grid">
+            <div><dt>Priority</dt><dd>{project.priority}</dd></div>
+            <div><dt>Strategy</dt><dd>{project.schedulingStrategy}</dd></div>
+            <div><dt>CPU</dt><dd>{project.requirements.cpuCoresPerTask} cores/task</dd></div>
+            <div><dt>Memory</dt><dd>{project.requirements.memoryMbPerTask.toLocaleString()} MB/task</dd></div>
+            <div><dt>Duration</dt><dd>{project.requirements.estimatedDurationSeconds}s/task</dd></div>
+            <div><dt>Renewable postponement</dt><dd>{project.requirements.postponeForRenewableEnergy ? 'Enabled' : 'Disabled'}</dd></div>
+            <div><dt><IconCalendar size={14} /> Created</dt><dd>{project.createdAt}</dd></div>
+            <div><dt><IconServer size={14} /> Allocated nodes</dt><dd>{project.allocatedNodes.length ? project.allocatedNodes.join(', ') : 'None yet'}</dd></div>
+          </dl>
+          <div className="project-expanded-footer">
+            <span><IconCpu size={15} /> {project.requirements.taskCount} total tasks</span>
+            <Button variant="light" color="forest" onClick={() => navigate(`/projects/${project.id}`)}>
+              View full details
+            </Button>
+          </div>
         </div>
-        <StatusBadge status={project.status} />
-      </div>
-      <p className="project-description">{project.description}</p>
-      <div className="project-progress-copy">
-        <span>{project.completedTasks} / {total} tasks</span>
-        <strong>{progress}%</strong>
-      </div>
-      <Progress value={progress} color="forest" size="sm" radius="xl" />
-      <div className="project-card-footer">
-        <span><IconCpu size={15} /> {project.requirements.cpuCoresPerTask} cores/task</span>
-        <span><IconCalendar size={15} /> {project.createdAt}</span>
-        <IconChevronRight className="project-arrow" size={18} />
-      </div>
+      )}
     </article>
   )
 }

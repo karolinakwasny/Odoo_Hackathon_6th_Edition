@@ -12,6 +12,7 @@ export function ProjectsPage() {
   const [opened, setOpened] = useState(false)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<ProjectStatus | 'All'>('All')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const projects = useProjectStore((state) => state.projects)
   const add = useProjectStore((state) => state.add)
 
@@ -54,8 +55,15 @@ export function ProjectsPage() {
       </div>
 
       {filtered.length > 0 ? (
-        <div className="project-grid">
-          {filtered.map((project) => <ProjectCard project={project} key={project.id} />)}
+        <div className="project-list">
+          {filtered.map((project) => (
+            <ProjectCard
+              project={project}
+              key={project.id}
+              expanded={expandedId === project.id}
+              onToggle={() => setExpandedId(expandedId === project.id ? null : project.id)}
+            />
+          ))}
         </div>
       ) : (
         <EmptyState description="Try a different name or status filter." />
