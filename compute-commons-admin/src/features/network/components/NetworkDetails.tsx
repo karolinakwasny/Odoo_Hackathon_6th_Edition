@@ -37,7 +37,7 @@ export function NetworkDetails({ selection, onClose }: { selection: NetworkSelec
       <span className="zone-country">{zone.country}</span>
       <h3>{zone.name}</h3>
       <div className="zone-summary">
-        <div><IconBolt size={16} /><strong>{zone.carbonIntensity}</strong><span>gCO₂eq/kWh</span></div>
+        <div><IconBolt size={16} /><strong>{zone.carbonIntensity ?? '—'}</strong><span>gCO₂eq/kWh</span></div>
         <div><strong>{zone.totalLoadMw?.toLocaleString() ?? '—'}</strong><span>MW total load</span></div>
         <div><IconLeaf size={16} /><strong>{zone.renewablePercentage ?? '—'}{zone.renewablePercentage !== undefined && '%'}</strong><span>renewable energy</span></div>
       </div>

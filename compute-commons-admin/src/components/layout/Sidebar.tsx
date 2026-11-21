@@ -2,7 +2,6 @@ import {
   IconLayoutDashboard,
   IconFolders,
   IconMap,
-  IconActivity,
   IconSettings,
   IconLeaf,
 } from "@tabler/icons-react"
@@ -12,7 +11,6 @@ const navigation = [
   { label: "Overview", icon: IconLayoutDashboard, to: "/" },
   { label: "Projects", icon: IconFolders, to: "/projects" },
   { label: "Network", icon: IconMap, to: "/network" },
-  { label: "Simulation", icon: IconActivity, to: "/simulation" },
 ]
 
 export function Sidebar() {

@@ -2,11 +2,9 @@ import { dashboardStats } from "../../mocks/dashboard"
 import { StatCard } from "./StatCard"
 import { SchedulerFeed } from "./SchedulerFeed"
 import { IconArrowUpRight, IconMapPin } from "@tabler/icons-react"
-import { useNavigate } from "react-router-dom"
 import { useHubProgress } from "../../hooks/useHubProgress"
 
 export function OverviewPage() {
-  const navigate = useNavigate()
   const progress = useHubProgress()
   const nodes = progress?.nodes_online ?? 0
   const chunks = progress?.projects[0]
@@ -28,9 +26,7 @@ export function OverviewPage() {
           <p>Here's what's happening across your network.</p>
         </div>
 
-        <button className="primary-button" onClick={() => navigate('/projects')}>
-          + New project
-        </button>
+        
       </div>
 
       <div className="stats-grid">
