@@ -18,6 +18,9 @@ export function AppRouter() {
       <Routes>
         <Route path="/" element={<WelcomePage />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
+        <Route path="/onboarding/location" element={<OnboardingPage />} />
+        <Route path="/onboarding/interests" element={<OnboardingPage />} />
+        <Route path="/onboarding/preferences" element={<OnboardingPage />} />
         <Route element={<Protected><AppShell /></Protected>}>
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/account" element={<AccountPage />} />

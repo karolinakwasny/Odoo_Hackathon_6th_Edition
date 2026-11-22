@@ -1,8 +1,15 @@
 import { IconArrowRight, IconLeaf } from '@tabler/icons-react'
 import { useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useUserStore } from '../../store/userStore'
 
 export function WelcomePage() {
   const navigate = useNavigate()
+  const completed = useUserStore((state) => state.onboardingCompleted)
+
+  useEffect(() => {
+    if (completed) navigate('/projects', { replace: true })
+  }, [completed, navigate])
   return (
     <main className="welcome-page">
       <nav className="welcome-nav">
@@ -13,7 +20,7 @@ export function WelcomePage() {
           <span className="welcome-eyebrow"><IconLeaf size={16} /> Community-powered research</span>
           <h1>Put unused computing power to work for a better world.</h1>
           <p>Support climate research, biodiversity, scientific discovery and public-interest projects with the resources you already have.</p>
-          <button className="native-button welcome-button" type="button" onClick={() => navigate('/onboarding')}>Get started <IconArrowRight size={18} /></button>
+          <button className="native-button welcome-button" type="button" onClick={() => navigate('/onboarding')}>Get started <IconArrowRight size={10} /></button>
         </div>
         <div className="welcome-orbit" aria-hidden="true">
           <span /><span /><span /><div>C</div>
