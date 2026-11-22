@@ -1,9 +1,13 @@
 import { useNavigate } from 'react-router-dom'
 import { useProjectStore } from '../../store/projectStore'
+import { useHubProgress } from '../../hooks/useHubProgress'
+import { withLiveProgress } from './liveProject'
 
 export function ProjectsPage() {
   const navigate = useNavigate()
-  const projects = useProjectStore((state) => state.projects)
+  const hub = useHubProgress()
+  // Forest Guardian gets its progress, active nodes and status from the live run
+  const projects = useProjectStore((state) => state.projects).map((project) => withLiveProgress(project, hub))
   return (
     <div className="owner-projects">
       <div className="owner-page-heading"><div><span>PROJECT CONTROL</span><h1>Projects</h1></div><button className="owner-primary" type="button">Create project</button></div>

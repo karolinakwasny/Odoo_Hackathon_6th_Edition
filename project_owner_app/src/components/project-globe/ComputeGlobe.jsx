@@ -2,19 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Globe from "react-globe.gl";
 import "./ComputeGlobe.css";
 import countries from "../../assets/countries.json";
-import {
-  energyData,
-  getMockCountryData,
-  getTimeAdjustedCountryData,
-} from "../../data/energyData";
 import { fetchLiveZones, getCachedElectricityZones } from "../../services/electricityMaps";
+import { carbonColor, carbonLevel } from "../../utils/carbonScale";
 
 const getCountryCode = (country) => {
-  const iso2 =
-    country.properties.ISO_A2 ||
-    country.properties.ISO_A2_EH ||
-    "";
-  if (iso2 && iso2 !== "-99") return iso2;
+  // ISO_A2 is "-99" for some countries (e.g. France, Norway); ISO_A2_EH has their real code
+  const iso2 = [country.properties.ISO_A2, country.properties.ISO_A2_EH]
+    .find((code) => code && code !== "-99");
+  if (iso2) return iso2;
 
   const rawCode =
     country.properties.ISO_A3 ||
@@ -36,77 +31,29 @@ const getCountryCode = (country) => {
   return normalized[rawCode] || rawCode;
 };
 
-const NO_DATA_COUNTRIES = new Set([
-  "RU", "CN", "JP", "KR", "KP", "PK", "AF",
-  "IR", "SA", "SY", "DZ", "LY", "SD", "CD",
-  "CU", "VE", "BY", "UA", "MM",
-]);
+// Electricity Maps zone -> country code: "NO-NO1" -> "NO", "US-CAL-CISO" -> "US", "DE" -> "DE"
+const zoneCountry = (zoneId) => zoneId.split("-")[0];
 
-const hasCountryData = (country) => {
-  return !NO_DATA_COUNTRIES.has(getCountryCode(country));
-};
-
-const normalizeLiveZoneCode = (zoneId) => {
-  if (zoneId === 'DE-LU' || zoneId.startsWith('DE')) return 'DE';
-  if (zoneId.startsWith('US-')) return 'US';
-  if (zoneId.startsWith('CA-')) return 'CA';
-  if (zoneId.startsWith('BR-')) return 'BR';
-  if (zoneId.startsWith('AU-')) return 'AU';
-  if (zoneId.startsWith('IN-')) return 'IN';
-  if (zoneId.startsWith('JP-')) return 'JP';
-  return zoneId;
-};
-
-const getCountryData = (country, timeOfDay, season, liveZones = []) => {
-  const code = getCountryCode(country);
-  const name = country.properties.NAME_EN || country.properties.ADMIN || code;
-  const continent = country.properties.CONTINENT || "";
-  const baseData = energyData[code] || getMockCountryData(code, name, continent);
-  const liveZone = liveZones.find((zone) => normalizeLiveZoneCode(zone.id) === code);
-  const adjusted = getTimeAdjustedCountryData(baseData, timeOfDay, season);
-  if (!liveZone) return adjusted;
-  return {
-    ...adjusted,
-    carbonIntensity: liveZone.carbonIntensity,
-    totalLoadMw: liveZone.totalLoadMw,
-    isLive: true,
-  };
-};
-
-const getSuitability = (country, timeOfDay, season, liveZones = []) => {
-  return getCountryData(country, timeOfDay, season, liveZones).suitability;
-};
-
-const getColor = (score) => {
-  if (score === null) return "rgba(142, 150, 145, 0.58)";
-  if (score >= 85) return "rgba(184, 237, 112, 0.82)";
-  if (score >= 70) return "rgba(174, 205, 118, 0.82)";
-  if (score >= 55) return "rgba(231, 182, 108, 0.82)";
-  if (score >= 40) return "rgba(222, 143, 104, 0.82)";
-  return "rgba(214, 112, 96, 0.82)";
-};
-
-const getRank = (score) => {
-  if (score >= 85) return "Excellent";
-  if (score >= 70) return "Preferred";
-  if (score >= 55) return "Moderate";
-  if (score >= 40) return "Limited";
-  return "Least preferred";
-};
-
-const getSourceRows = (data) => {
-  const sources = data.energySources || {};
-  return Object.entries(sources)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4)
-    .map(([source, value]) => `
-      <div class="energy-source-row">
-        <span>${source}</span>
-        <div class="energy-source-track"><i style="width:${value}%"></i></div>
-        <strong>${value}%</strong>
-      </div>
-    `)
-    .join("");
+/**
+ * Live grid data per country code, from the Electricity Maps zones.
+ * Countries the API splits into regions (US, BR, CA, ...) get the average of their zones.
+ */
+const liveDataByCountry = (liveZones) => {
+  const grouped = {};
+  liveZones
+    .filter((zone) => zone.carbonIntensity > 0)
+    .forEach((zone) => {
+      (grouped[zoneCountry(zone.id)] ??= []).push(zone);
+    });
+  return Object.fromEntries(Object.entries(grouped).map(([code, zones]) => {
+    const loads = zones.map((zone) => zone.totalLoadMw).filter((load) => load !== undefined);
+    return [code, {
+      carbonIntensity: Math.round(zones.reduce((sum, zone) => sum + zone.carbonIntensity, 0) / zones.length),
+      totalLoadMw: loads.length ? loads.reduce((sum, load) => sum + load, 0) : undefined,
+      timestamp: zones[0].timestamp,
+      zoneCount: zones.length,
+    }];
+  }));
 };
 
 export default function ComputeGlobe({
@@ -120,8 +67,6 @@ export default function ComputeGlobe({
   const containerRef = useRef(null);
 
   const [hoveredCountry, setHoveredCountry] = useState(null);
-  const timeOfDay = "Midday";
-  const season = "Summer";
   const [globeSize, setGlobeSize] = useState({
     width: 600,
     height: 600,
@@ -151,6 +96,7 @@ export default function ComputeGlobe({
     () => countries.features,
     []
   );
+  const liveByCountry = useMemo(() => liveDataByCountry(liveZones), [liveZones]);
 
   const collaborationPoints = useMemo(() => {
     if (!showProjectNodes) return [];
@@ -195,14 +141,6 @@ export default function ComputeGlobe({
   }, [projectCountries, projectName, projectNodeCount, showProjectNodes]);
 
 
-  const handleCountryClick = (country) => {
-    const code = getCountryCode(country);
-    if (NO_DATA_COUNTRIES.has(code)) {
-      return;
-    }
-
-  };
-
   return (
     <div ref={containerRef} className="compute-globe">
       <Globe
@@ -218,40 +156,35 @@ export default function ComputeGlobe({
           country === hoveredCountry ? 0.025 : 0.008
         }
         polygonCapColor={(country) =>
-          hasCountryData(country)
-            ? getColor(getSuitability(country, timeOfDay, season, liveZones))
-            : getColor(null)
+          carbonColor(liveByCountry[getCountryCode(country)]?.carbonIntensity)
         }
         polygonSideColor={() => "rgba(0,0,0,0)"}
         polygonStrokeColor={() => "rgba(82, 96, 82, 0.42)"}
         polygonLabel={(country) => {
-          if (!hasCountryData(country)) {
+          const name = country.properties.NAME_EN || country.properties.ADMIN;
+          const live = liveByCountry[getCountryCode(country)];
+          if (!live) {
             return `
               <div class="country-tooltip no-data-tooltip">
-                <strong>${country.properties.NAME_EN || country.properties.ADMIN}</strong>
-                <div class="no-data-label">No grid data available</div>
+                <strong>${name}</strong>
+                <div class="no-data-label">No live grid data</div>
               </div>
             `;
           }
-          const data = getCountryData(country, timeOfDay, season, liveZones);
-
+          const updated = new Date(live.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
           return `
             <div class="country-tooltip">
-              <strong>${data.name}</strong>
-              <div class="tooltip-rank ${data.status}">
-                <b>${getRank(data.suitability)}</b>
-                <span>${data.suitability}/100</span>
+              <strong>${name}</strong>
+              <div class="tooltip-rank">
+                <b style="color:${carbonColor(live.carbonIntensity)}">${carbonLevel(live.carbonIntensity)} emissions</b>
               </div>
-              <div>Carbon intensity: ${data.carbonIntensity} gCO₂/kWh</div>
-              <div>Primary clean signal: ${data.primarySource}</div>
-              <div>Renewable overproduction: ${data.renewableOverproduction} GW</div>
-              <div>Available nodes: ${data.availableNodes}</div>
-              ${getSourceRows(data)}
+              <div>Carbon intensity: ${live.carbonIntensity} gCO₂/kWh${live.zoneCount > 1 ? ` (avg. of ${live.zoneCount} regions)` : ""}</div>
+              ${live.totalLoadMw !== undefined ? `<div>Total load: ${Math.round(live.totalLoadMw).toLocaleString()} MW</div>` : ""}
+              <div>Live · Electricity Maps · ${updated}</div>
             </div>
           `;
         }}
         onPolygonHover={setHoveredCountry}
-        onPolygonClick={handleCountryClick}
         polygonsTransitionDuration={300}
         pointsData={collaborationPoints}
         pointLat={(point) => point.lat}

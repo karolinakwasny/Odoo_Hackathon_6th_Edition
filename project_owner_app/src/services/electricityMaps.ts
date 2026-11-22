@@ -7,8 +7,8 @@ export interface LiveZone {
   live: boolean
 }
 
-const ZONE_IDS = ['DE','FR','NL','DK-DK1','ES','PT','IT-NORTH','NO-NO1','CZ','PL','BE','GB','IE','SE','FI','AT','CH','GR','RO','HU','HR','BG','US-CAL-CISO','US-TEX-ERCO','US-NW-BPAT','CA-ON','CA-QC','MX','BR-CS','BR-N','BR-NE','BR-S','AR','CL','AU-NEM-NSW','AU-NEM-VIC','NZ-NZN','CN','IN-WEST','IN-NORTH','JP-TK','KR','ZA','NG','KE','MA','EG']
-const CACHE_KEY = 'project-owner:electricity-zones'
+const ZONE_IDS = ['DE','FR','NL','DK-DK1','ES','PT','IT','NO-NO1','CZ','PL','BE','GB','IE','SE','FI','AT','CH','GR','RO','HU','HR','BG','US-CAL-CISO','US-TEX-ERCO','US-NW-BPAT','CA-ON','CA-QC','MX','BR-CS','BR-N','BR-NE','BR-S','AR','CL','AU-NEM-NSW','AU-NEM-VIC','NZ-NZN','CN','IN-WEST','IN-NORTH','JP-TK','KR','ZA','NG','KE','MA','EG']
+const CACHE_KEY = 'project-owner:electricity-zones:v2'
 const CACHE_TTL_MS = 30 * 60 * 1000
 
 let memoryCache: { fetchedAt: number; zones: LiveZone[] } | null = null

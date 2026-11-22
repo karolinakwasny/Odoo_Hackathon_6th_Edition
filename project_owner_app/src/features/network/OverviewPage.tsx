@@ -2,11 +2,17 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useProjectStore } from '../../store/projectStore'
 import { getProjectOwnerOverview, type ProjectOverviewMetric } from '../../services/projectOverview'
+import { useHubProgress } from '../../hooks/useHubProgress'
+import { LIVE_PROJECT_ID, liveNumbers, withLiveProgress } from '../projects/liveProject'
 
 export function OverviewPage() {
   const navigate = useNavigate()
   const projects = useProjectStore((state) => state.projects)
-  const forestProject = projects.find((project) => project.id === 'forest-guardian')
+  const hub = useHubProgress()
+  // Forest Guardian's progress, status and active nodes from the live run (same as on its project page)
+  const storedForestProject = projects.find((project) => project.id === LIVE_PROJECT_ID)
+  const forestProject = storedForestProject && withLiveProgress(storedForestProject, hub)
+  const forestLive = liveNumbers(hub)
   const completedProject = projects.find((project) => project.status === 'Completed')
   const [overview, setOverview] = useState<ProjectOverviewMetric | null>(null)
 
@@ -39,9 +45,9 @@ export function OverviewPage() {
         )}
         {forestProject && (
           <button className="owner-overview-project" type="button" onClick={() => navigate(`/projects/${forestProject.id}`)}>
-            <span>Active project</span>
+            <span>{forestProject.status === 'Completed' ? 'Completed project' : `${forestProject.status} project`}</span>
             <strong>{forestProject.name}</strong>
-            <small>{forestProject.progress}% processed</small>
+            <small>{forestProject.progress}% processed{forestLive ? ` · ${forestLive.completed} / ${forestLive.total} chunks` : ''}</small>
           </button>
         )}
         <button className="owner-add-project" type="button" onClick={() => navigate('/projects')}>

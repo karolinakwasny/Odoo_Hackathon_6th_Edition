@@ -155,3 +155,50 @@ button { font:inherit; }
 
 @media(max-width:900px){.owner-overview{grid-template-columns:1fr;}.owner-globe{right:0;top:0;height:480px}.owner-project-grid{grid-template-columns:repeat(2,1fr)}.owner-detail-grid{grid-template-columns:repeat(2,1fr)}.owner-detail-content{grid-template-columns:1fr}.owner-header{padding:0 20px}.owner-status{display:none}}
 @media(max-width:600px){.owner-header nav{display:none}.owner-overview{padding:24px 16px}.owner-overview-copy h1{font-size:42px}.owner-globe{height:360px}.owner-project-grid{grid-template-columns:1fr}.owner-projects,.owner-project-details{padding:24px 16px}}
+
+/* Live task progress + coordinator view on the Forest Guardian page */
+.owner-task-progress,.owner-coord-box { border:1px solid rgba(168,220,211,.12);border-radius:8px;background:rgba(13,21,24,.45);padding:16px;margin-bottom:12px }
+.owner-task-progress-heading,.owner-coord-heading { display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px }
+.owner-task-progress h2,.owner-coord-heading h2 { margin:0;font-size:15px }
+.owner-task-progress p,.owner-coord-heading p { margin:4px 0 0;color:#91a39f;font-size:12px }
+.owner-task-progress-heading strong { font-size:22px }
+.owner-progress-large { height:10px }
+.owner-chunk-bar { margin-top:10px;color:#91a39f;font-family:'DM Mono',monospace;font-size:10px }.owner-chunk-bar .owner-progress { margin-top:4px }
+.owner-muted { color:#7f918c;font-size:12px }
+.owner-primary:disabled { opacity:.45;cursor:default }.owner-primary:disabled:hover { background:#477a6c }
+.owner-coord-badge { flex-shrink:0;border:1px solid rgba(168,220,211,.18);border-radius:20px;padding:3px 9px;color:#b8c9c4;font-family:'DM Mono',monospace;font-size:9px;white-space:nowrap }
+.owner-coord-badge.low,.owner-coord-badge.status-busy { border-color:rgba(149,217,189,.5);color:#95d9bd }
+.owner-coord-badge.medium,.owner-coord-badge.status-idle { border-color:rgba(214,198,111,.5);color:#d6c66f }
+.owner-coord-badge.high,.owner-coord-badge.status-error { border-color:rgba(217,140,100,.55);color:#e09a74 }
+.owner-coord-row { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid rgba(168,220,211,.07) }
+.owner-coord-country { display:flex;align-items:center;gap:9px;flex-wrap:wrap }.owner-flag { font-size:20px;line-height:1 }
+.owner-speed { display:flex;gap:2px;flex-shrink:0 }.owner-speed button { width:30px;height:26px;border:1px solid rgba(168,220,211,.18);background:transparent;color:#91a39f;font-family:'DM Mono',monospace;font-size:10px;cursor:pointer }.owner-speed button:first-child { border-radius:5px 0 0 5px }.owner-speed button:last-child { border-radius:0 5px 5px 0 }.owner-speed button.active { background:#477a6c;color:#eef7f4 }
+.owner-worker { justify-content:flex-start;flex-wrap:wrap;font-size:13px }.owner-worker strong { white-space:nowrap }.owner-worker-chunk { margin-left:auto;font-family:'DM Mono',monospace;font-size:10px }
+.owner-dot { width:9px;height:9px;border-radius:50%;flex-shrink:0 }
+.owner-log { max-height:240px;overflow:auto;font-family:'DM Mono',monospace;font-size:11px;line-height:1.55 }
+.owner-legend { display:flex;gap:6px;flex-shrink:0 }.owner-legend span { border-radius:4px;padding:3px 7px;color:white;font-family:'DM Mono',monospace;font-size:9px }.owner-legend .not-done { background:#a8423b }.owner-legend .done { background:#2f7a4f }
+.owner-chunk-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:9px;padding:0 0 6px 6px }
+.owner-chunk-tile { position:relative;border-radius:6px;background:#a8423b;color:white;padding:6px 0;text-align:center;font-family:'DM Mono',monospace;font-size:11px;font-weight:500 }.owner-chunk-tile.done { background:#2f7a4f }
+.owner-chunk-flag { position:absolute;left:0;bottom:0;transform:translate(-50%,50%);font-size:17px;line-height:1;z-index:1 }
+
+/* Section slider on the project page: ← title + dots → */
+.owner-slider-nav { display:flex;align-items:center;justify-content:space-between;gap:12px;margin:22px 0 14px }
+.owner-slider-nav>button { width:38px;height:38px;flex-shrink:0;border:1px solid rgba(168,222,211,.28);border-radius:50%;background:rgba(71,122,108,.25);color:#eef7f4;font-size:16px;cursor:pointer }
+.owner-slider-nav>button:hover:not(:disabled) { background:#477a6c }
+.owner-slider-nav>button:disabled { opacity:.3;cursor:default }
+.owner-slider-title { display:flex;flex-direction:column;align-items:center;gap:8px }
+.owner-slider-title strong { font-size:15px }
+.owner-slider-dots { display:flex;gap:6px }
+.owner-slider-dots button { width:7px;height:7px;padding:0;border:0;border-radius:50%;background:rgba(168,220,211,.22);cursor:pointer }
+.owner-slider-dots button.active { background:#95d9bd;box-shadow:0 0 8px #95d9bd }
+.owner-slider-nav + .owner-detail-grid { margin-top:0 }
+
+/* Globe column: globe + live carbon-intensity legend below it */
+.owner-globe-column { display:flex;flex-direction:column;align-items:center;gap:10px;min-width:0 }
+.owner-carbon-legend { display:flex;flex-direction:column;align-items:center;gap:6px;color:#91a39f;font-family:'DM Mono',monospace;font-size:9px }
+.owner-carbon-legend>div { display:flex;flex-wrap:wrap;justify-content:center;gap:4px }
+.owner-carbon-legend i { font-style:normal;border-radius:4px;padding:3px 7px;color:#14211b;font-weight:500 }
+
+/* Globe hover info cards: in front of the globe canvas, and not clipped by the round globe area */
+.owner-detail-globe,.owner-detail-globe .compute-globe { overflow:visible }
+.owner-detail-globe .float-tooltip-kap { z-index:50;pointer-events:none }
