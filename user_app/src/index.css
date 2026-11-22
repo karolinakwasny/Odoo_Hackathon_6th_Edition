@@ -50,6 +50,18 @@ button, input, select { font: inherit; }
 .app-main { min-width: 0; }
 
 .welcome-page { min-height: 100vh; background: linear-gradient(145deg,#edf4e9,#f8faf5); }
+.welcome-page:before,
+.onboarding-page:before {
+  content:"";
+  position:fixed;
+  z-index:-1;
+  inset:0;
+  background-image:url('/solarpunk-network.jpg');
+  background-position:center;
+  background-size:cover;
+  opacity:.18;
+  pointer-events:none;
+}
 .welcome-nav { height: 82px; display: flex; align-items: center; max-width:1180px; margin:auto; padding:0 24px; }
 .welcome-brand { display:flex; align-items:center; gap:10px; }
 .welcome-hero { min-height:calc(100vh - 82px); max-width:1180px; margin:auto; display:grid; grid-template-columns:1fr .8fr; align-items:center; gap:60px; padding:40px 24px 80px; }
@@ -68,6 +80,24 @@ button, input, select { font: inherit; }
 .step-progress { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }.step-progress span { height:4px; border-radius:4px; background:#edf0ea; }.step-progress span.active { background:#609c69; }
 .onboarding-step { display:grid; gap:14px; margin-top:24px; }.onboarding-step>span { color:#8a988d; font-size:10px; text-transform:uppercase; letter-spacing:.8px; }.onboarding-step h1 { margin:0 0 6px; font-size:26px; }
 .onboarding-actions { display:flex; justify-content:space-between; margin-top:24px; }
+.interest-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.interest-card { min-height:84px; display:grid; gap:5px; align-content:center; border:1px solid rgba(180,220,150,.16); border-radius:8px; background:rgba(20,32,24,.92); color:#dce7d7; padding:12px; text-align:left; cursor:pointer; }
+.interest-card strong { color:#eef4e8;font-size:12px }.interest-card span { color:#98a99b;font-size:10px }.interest-card.active { border-color:#b5e86a;background:rgba(181,232,106,.10); }
+.form-explanation { grid-column:1/-1; border-left:2px solid rgba(181,232,106,.34); color:#aebaae; font-size:11px; line-height:1.55; padding:8px 12px; }
+.welcome-page,
+.onboarding-page {
+  position:relative;
+  color:#e7eddf;
+  background:radial-gradient(circle at 72% 50%, rgba(72,105,57,.20), transparent 45%), #111b15;
+}
+.onboarding-card {
+  border:1px solid rgba(181,232,106,.16);
+  border-radius:8px;
+  background:rgba(20,32,24,.94);
+  color:#e7eddf;
+  box-shadow:0 18px 50px rgba(0,0,0,.22);
+}
+.onboarding-card h1 { color:#eef4e8 }
 
 .projects-experience {
   width: 100%;
