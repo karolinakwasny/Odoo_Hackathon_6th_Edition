@@ -117,6 +117,7 @@ export default function ComputeGlobe({
   liveZoneData = [],
 }) {
   const globeRef = useRef();
+  const containerRef = useRef(null);
 
   const [hoveredCountry, setHoveredCountry] = useState(null);
   const timeOfDay = "Midday";
@@ -203,7 +204,7 @@ export default function ComputeGlobe({
   };
 
   return (
-    <div className="compute-globe">
+    <div ref={containerRef} className="compute-globe">
       <Globe
         ref={globeRef}
         width={globeSize.width}
