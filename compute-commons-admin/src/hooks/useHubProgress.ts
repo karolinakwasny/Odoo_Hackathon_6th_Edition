@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 
 export interface HubProgress {
   type: 'progress'
-  projects: { id: string; done: number; running: number; total: number; percent: number }[]
+  // done/running/total are for the current run; completed_total adds up all runs since the backend started
+  projects: { id: string; done: number; running: number; total: number; percent: number; completed_total?: number }[]
   nodes_online: number
 }
 

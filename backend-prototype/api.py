@@ -32,7 +32,8 @@ PROJECT_ID, PROJECT_NAME = "math", "Math chunks"
 events: queue.Queue = queue.Queue()
 engine = CoordinatorEngine(events, chunks_dir=HERE / "chunks")
 clients: dict[str, WebSocket] = {}  # node_id -> connection
-run_started = False
+run_started = False             # True while a run is going; a new "request" starts the next run after it
+completed_before = 0            # chunks completed in earlier runs since the backend started
 last_state: dict | None = None  # latest coordinator snapshot, sent to new clients
 logs: list[dict] = []           # coordinator log lines, the last 200 are kept
 
@@ -53,6 +54,8 @@ def progress_msg() -> dict:
             "running": states.count("in_progress"),
             "total": len(states),
             "percent": percent(),
+            # all chunks completed since the backend started, over every run
+            "completed_total": completed_before + (states.count("done") if run_started else 0),
         }],
         # donating nodes = coordinator workers that are currently connected
         "nodes_online": sum(w.status in ("idle", "busy") for w in engine.workers.values()),
@@ -72,7 +75,7 @@ async def broadcast(msg: dict) -> None:
 
 async def forward_coordinator_events() -> None:
     """The coordinator reports changes on a queue; pass them on to every connected client."""
-    global last_state
+    global last_state, run_started, completed_before
     while True:
         changed = False
         while not events.empty():
@@ -84,6 +87,10 @@ async def forward_coordinator_events() -> None:
                 await broadcast({"type": "log", **entry})
             elif kind == "state":
                 last_state = payload
+            elif kind == "finished" and run_started:
+                # the run is over: add its chunks to the total and allow the next run
+                completed_before += list(engine.chunk_states.values()).count("done")
+                run_started = False
             changed = changed or kind in ("state", "finished")
         if changed:
             await broadcast(state_msg())

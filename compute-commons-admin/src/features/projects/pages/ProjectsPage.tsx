@@ -6,6 +6,7 @@ import { ProjectCard } from '../components/ProjectCard'
 import { ProjectForm } from '../components/ProjectForm'
 import { useProjectStore } from '../../../store/projectStore'
 import { useHubProgress } from '../../../hooks/useHubProgress'
+import { withLiveProgress } from '../liveProject'
 import type { CreateProjectInput, ProjectStatus } from '../types'
 
 export function ProjectsPage() {
@@ -13,9 +14,10 @@ export function ProjectsPage() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<ProjectStatus | 'All'>('All')
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const projects = useProjectStore((state) => state.projects)
+  const storedProjects = useProjectStore((state) => state.projects)
   const add = useProjectStore((state) => state.add)
   const hub = useHubProgress()
+  const projects = useMemo(() => storedProjects.map((project) => withLiveProgress(project, hub)), [storedProjects, hub])
   const runningProjects = hub?.projects.filter((project) => project.running > 0).length ?? 0
 
   const filtered = useMemo(() => projects.filter((project) =>

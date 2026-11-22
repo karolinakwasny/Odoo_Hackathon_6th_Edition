@@ -10,6 +10,7 @@ import {
 import { Button, Progress } from '@mantine/core'
 import { useNavigate } from 'react-router-dom'
 import { useHubProgress } from '../../../hooks/useHubProgress'
+import { withLiveProgress } from '../liveProject'
 import type { Project, ProjectCategory } from '../types'
 import { StatusBadge } from '../../../components/ui/StatusBadge'
 
@@ -26,12 +27,13 @@ const categoryIcons = {
   Other: IconDots,
 } satisfies Record<ProjectCategory, typeof IconWorld>
 
-export function ProjectCard({ project, expanded, onToggle }: ProjectCardProps) {
+export function ProjectCard({ project: storedProject, expanded, onToggle }: ProjectCardProps) {
   const navigate = useNavigate()
+  const hub = useHubProgress()
+  const project = withLiveProgress(storedProject, hub)
   const total = project.requirements.taskCount
   const progress = total > 0 ? Math.round(project.completedTasks / total * 100) : 0
   const CategoryIcon = categoryIcons[project.category]
-  const chunks = useHubProgress()?.projects[0]
 
   return (
     <article className={`project-list-item${expanded ? ' expanded' : ''}`}>
@@ -67,8 +69,8 @@ export function ProjectCard({ project, expanded, onToggle }: ProjectCardProps) {
           <dl className="project-detail-grid">
             <div><dt>Priority</dt><dd>{project.priority}</dd></div>
             <div><dt>Strategy</dt><dd>{project.schedulingStrategy}</dd></div>
-            <div><dt>Total chunks</dt><dd>{chunks?.total ?? '—'}</dd></div>
-            <div><dt>Completed chunks</dt><dd>{chunks?.done ?? '—'}</dd></div>
+            <div><dt>Total chunks</dt><dd>{project.requirements.taskCount}</dd></div>
+            <div><dt>Completed chunks</dt><dd>{project.completedTasks}</dd></div>
             <div><dt>Renewable postponement</dt><dd>{project.requirements.postponeForRenewableEnergy ? 'Enabled' : 'Disabled'}</dd></div>
             <div><dt><IconCalendar size={14} /> Created</dt><dd>{project.createdAt}</dd></div>
           </dl>

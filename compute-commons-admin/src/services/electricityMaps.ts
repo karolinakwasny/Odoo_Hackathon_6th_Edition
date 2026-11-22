@@ -1,7 +1,7 @@
 import type { ElectricityMapsApiResponse, ElectricityZone } from '../features/network/types'
 import { worldwideZoneCountries } from '../mocks/electricity'
 
-type LiveEndpoint = 'carbon-intensity' | 'total-load'
+type LiveEndpoint = 'carbon-intensity' | 'total-load' | 'power-breakdown'
 
 const ZONE_IDS = [
   'DE', 'FR', 'NL', 'DK-DK1', 'ES', 'PT', 'IT', 'NO-NO1', 'CZ', 'PL',
@@ -11,7 +11,8 @@ const ZONE_IDS = [
   'NZ-NZN', 'CN', 'IN-WEST', 'IN-NORTH', 'JP-TK', 'KR', 'ZA', 'NG', 'KE', 'MA', 'EG',
 ]
 
-const CACHE_KEY = 'compute-commons:electricity-zones'
+// v2: zones now include renewablePercentage, so older cached data is ignored
+const CACHE_KEY = 'compute-commons:electricity-zones:v2'
 const CACHE_TTL_MS = 30 * 60 * 1000
 
 interface ElectricityCache {
@@ -81,11 +82,12 @@ export async function fetchLatestElectricityZones(): Promise<{
 
   inFlightRequest = (async () => {
   const liveZones = await Promise.all(ZONE_IDS.map(async (apiZoneId) => {
-    const [carbon, load] = await Promise.all([
+    const [carbon, load, breakdown] = await Promise.all([
       fetchLatest('carbon-intensity', apiZoneId),
       fetchLatest('total-load', apiZoneId),
+      fetchLatest('power-breakdown', apiZoneId),
     ])
-    if (!carbon && !load) return null
+    if (!carbon && !load && !breakdown) return null
 
     const zoneId = normalizeWorldZoneId(apiZoneId)
     const countryNames = worldwideZoneCountries[zoneId] ?? [zoneId]
@@ -96,6 +98,7 @@ export async function fetchLatestElectricityZones(): Promise<{
       country: countryNames[0],
       carbonIntensity: carbon?.carbonIntensity ?? 0,
       totalLoadMw: load?.value,
+      renewablePercentage: breakdown?.renewablePercentage,
       timestamp,
       dataSource: 'live',
     }
@@ -114,6 +117,7 @@ export async function fetchLatestElectricityZones(): Promise<{
       ...existing,
       carbonIntensity: liveZone.carbonIntensity || existing.carbonIntensity,
       totalLoadMw: liveZone.totalLoadMw ?? existing.totalLoadMw,
+      renewablePercentage: liveZone.renewablePercentage ?? existing.renewablePercentage,
       timestamp: liveZone.timestamp,
       dataSource: 'live',
     })
