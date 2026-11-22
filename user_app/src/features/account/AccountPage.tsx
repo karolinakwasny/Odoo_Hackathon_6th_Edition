@@ -40,7 +40,6 @@ export function AccountPage() {
 
       {/* LEFT: PROFILE */}
       <section className="account-profile-card">
-
         <div className="account-identity">
           {editing ? (
             <label className="native-field">
@@ -52,9 +51,7 @@ export function AccountPage() {
             </label>
           ) : (
             <>
-              <div className="account-avatar">
-                {(store.displayName || store.username).slice(0, 1).toUpperCase()}
-              </div>
+              
 
               <span>Contributor</span>
               <h2>{store.displayName || store.username}</h2>
@@ -62,7 +59,13 @@ export function AccountPage() {
             </>
           )}
 
-          <span className="native-badge">{store.profileType}</span>
+<button
+        className="native-button"
+        type="button"
+        onClick={() => editing ? saveProfile() : setEditing(true)}
+      >
+        {editing ? 'Save changes' : 'Edit account'}
+      </button>
         </div>
 
         {/* GLOBE: PART OF THE PROFILE */}
@@ -205,13 +208,7 @@ export function AccountPage() {
 
       </section>
     </div>
-    <button
-        className="native-button"
-        type="button"
-        onClick={() => editing ? saveProfile() : setEditing(true)}
-      >
-        {editing ? 'Save changes' : 'Edit account'}
-      </button>
+    
   </div>
 )
 }
